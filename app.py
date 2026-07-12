@@ -29,6 +29,26 @@ from lighting_control import get_lighting_controller
 
 app = FastAPI(title="Workstation Health Dashboard")
 
+
+@app.middleware("http")
+async def no_cache_for_dashboard_assets(request, call_next):
+    """Force the browser to always revalidate index.html/static assets.
+
+    Without this, StaticFiles serves no Cache-Control header at all, which
+    lets browsers apply their own heuristic caching -- so a normal refresh
+    can silently serve a stale cached dashboard.js/index.html after a
+    deploy, with no visible error, while /api/* and /ws (never cached
+    anyway) look completely fine. `no-cache` (not `no-store`) still allows
+    the existing ETag/Last-Modified conditional-request support to return a
+    cheap 304 when nothing changed -- this only forces the revalidation
+    round-trip to happen every time, not a full re-download every time.
+    """
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # Track active WebSocket connections
 active_connections: Set[WebSocket] = set()
 
