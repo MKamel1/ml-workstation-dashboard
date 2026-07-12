@@ -2,43 +2,61 @@
 
 from typing import Dict, List, Optional
 import config
+from metrics.schema import CPUMetrics, GPUMetrics, MemoryMetrics, MetricsSnapshot, StorageMetrics
 
 
 class BottleneckDetector:
     """Detects performance bottlenecks in the system."""
-    
+
     def __init__(self):
         """Initialize bottleneck detector."""
         self.thresholds = config.BOTTLENECK_DETECTION
-        
-    def detect(self, metrics: Dict) -> List[Dict]:
+
+    def detect(self, metrics: MetricsSnapshot) -> List[Dict]:
         """
         Detect bottlenecks from current system metrics.
-        
+
         Returns list of bottleneck alerts with severity and description.
         """
         bottlenecks = []
-        
-        # Extract metrics
-        gpu_data = metrics.get('gpu', [])
-        cpu_data = metrics.get('cpu', {})
-        memory_data = metrics.get('memory', {})
-        storage_data = metrics.get('storage', {})
-        
+
+        # Extract metrics. 'gpu'/'cpu'/'memory'/'storage' are required keys of
+        # MetricsSnapshot whenever this is actually called -- app.py's
+        # collect_raw_metrics() always sets all four before calling
+        # detect_bottlenecks() (the error-fallback path in app.py's websocket
+        # loop hardcodes bottlenecks=[] instead of calling this function at
+        # all). Direct subscript so a renamed/missing key raises loudly
+        # instead of silently defaulting to an empty dict/list.
+        gpu_data: List[GPUMetrics] = metrics['gpu']
+        cpu_data: CPUMetrics = metrics['cpu']
+        memory_data: MemoryMetrics = metrics['memory']
+        storage_data: StorageMetrics = metrics['storage']
+
         if not self.thresholds['enabled']:
             return bottlenecks
-        
+
         # Get first GPU for analysis (multi-GPU support can be added)
-        gpu = gpu_data[0] if gpu_data else None
-        
+        gpu: Optional[GPUMetrics] = gpu_data[0] if gpu_data else None
+
         if gpu:
+            # NOTE: fields below are read with .get() rather than gpu['...']
+            # even where metrics/schema.py marks them required, because a
+            # per-GPU NVML read failure legitimately replaces this whole dict
+            # with a smaller {"index", "error"} shape (see GPUMetrics
+            # docstring in metrics/schema.py and GPUMetricsCollector.collect
+            # in metrics/gpu_metrics.py) -- switching these to subscript
+            # access would turn that documented, already-tolerated condition
+            # into an unhandled KeyError instead of just skipping alerts for
+            # that GPU this tick.
             gpu_util = gpu.get('gpu_util', 0)
             gpu_mem_util = gpu.get('memory_util', 0)
-            
+
             # 1. GPU underutilization + High CPU = Data preprocessing bottleneck
             # FIX BUG-C12: Only alert if GPU has active ML processes running
-            cpu_util = cpu_data.get('utilization_total', 0)
-            
+            # 'utilization_total' is a required, always-present CPUMetrics
+            # field (no error-shape variant for CPU) -- subscript directly.
+            cpu_util = cpu_data['utilization_total']
+
             # Check if GPU has active processes (indicates ML workload is running)
             has_gpu_processes = len(gpu.get('top_processes', [])) > 0
             
@@ -69,9 +87,13 @@ class BottleneckDetector:
                 })
             
             # 2. GPU underutilization + High disk I/O = Data loading bottleneck
+            # 'disk_io' is a required StorageMetrics key (possibly an empty
+            # list on the first collection tick, never a missing key) and
+            # each DiskIOStats entry's read/write fields are required too --
+            # subscript directly.
             disk_busy = False
-            for disk in storage_data.get('disk_io', []):
-                total_io = disk.get('read_mb_s', 0) + disk.get('write_mb_s', 0)
+            for disk in storage_data['disk_io']:
+                total_io = disk['read_mb_s'] + disk['write_mb_s']
                 if total_io > config.THRESHOLDS['storage']['io_high_mbs']:  # High I/O threshold
                     disk_busy = True
                     break
@@ -92,8 +114,11 @@ class BottleneckDetector:
             
             # 3. Swap usage detected (CRITICAL for ML - but only if significant)
             # FIX BUG-C01: Increase threshold and require RAM pressure to avoid false alerts
-            swap_used_gb = memory_data.get('swap_used_gb', 0)
-            mem_percent = memory_data.get('percent', 0)
+            # 'swap_used_gb'/'percent' are required, always-present
+            # MemoryMetrics fields (no error-shape variant for memory) --
+            # subscript directly.
+            swap_used_gb = memory_data['swap_used_gb']
+            mem_percent = memory_data['percent']
             
             # CRITICAL: Only alert if swap > 1GB AND RAM is under pressure (>85%)
             # This prevents false alerts from minimal OS swap activity
@@ -232,7 +257,7 @@ class BottleneckDetector:
 # Singleton instance
 _bottleneck_detector = None
 
-def detect_bottlenecks(metrics: Dict) -> List[Dict]:
+def detect_bottlenecks(metrics: MetricsSnapshot) -> List[Dict]:
     """Detect system bottlenecks."""
     global _bottleneck_detector
     if _bottleneck_detector is None:
