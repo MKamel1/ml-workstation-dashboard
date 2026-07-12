@@ -7,10 +7,14 @@ PORT = 8000
 # Update interval (seconds)
 UPDATE_INTERVAL = 1.0
 
-# Historical data retention (seconds) - 24 hours default
-HISTORY_RETENTION = 86400
+# Historical data retention in days.
+# app.py's cleanup_old_metrics(retention_days=7) call sites should be updated
+# to use retention_days=config.RETENTION_DAYS instead of the hardcoded literal.
+RETENTION_DAYS = 7
 
-# Alert thresholds
+# Alert thresholds - single source of truth for detection/bottleneck_detector.py.
+# Every threshold the detector compares a metric against lives here; the detector
+# imports config and reads config.THRESHOLDS[...] instead of using inline literals.
 THRESHOLDS = {
     "gpu": {
         "temperature_warning": 80,  # °C
@@ -18,6 +22,9 @@ THRESHOLDS = {
         "memory_warning": 90,  # % of VRAM
         "memory_critical": 95,
         "utilization_low": 30,  # % - for bottleneck detection
+        "active_util_min": 5,  # % - above this, GPU is considered actively in use (not idle)
+        "pcie_active_util_min": 25,  # % - only flag PCIe link degradation above this utilization
+        "vram_critical_pct": 95,  # % of VRAM - risk of OOM
     },
     "cpu": {
         "temperature_warning": 80,
@@ -27,11 +34,19 @@ THRESHOLDS = {
     "memory": {
         "usage_warning": 85,  # % of RAM
         "usage_critical": 95,
-        "swap_critical": 0,  # Any swap usage is critical for ML
+        "usage_high": 90,  # % of RAM - standalone "high memory" warning
+        # Real swap policy (per BUG-C01): swap usage alone is NOT critical.
+        # It's only a problem once it's large AND RAM is under pressure -
+        # a little OS swap activity with plenty of free RAM is normal and not alerted on.
+        "swap_critical_gb": 1.0,
+        "swap_critical_ram_pct": 85,
+        "swap_warning_gb": 0.5,
+        "swap_warning_ram_pct": 75,
     },
     "storage": {
         "iops_low": 1000,  # For bottleneck detection
         "latency_high": 50,  # ms
+        "io_high_mbs": 500,  # MB/s combined read+write - high disk I/O for data-loading bottleneck check
     },
 }
 

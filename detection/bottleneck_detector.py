@@ -43,7 +43,7 @@ class BottleneckDetector:
             has_gpu_processes = len(gpu.get('top_processes', [])) > 0
             
             # Check if GPU is actually being used (not just idle/passive monitoring)
-            gpu_is_active = gpu_util > 5  # More than idle monitoring threshold
+            gpu_is_active = gpu_util > config.THRESHOLDS['gpu']['active_util_min']  # More than idle monitoring threshold
             
             # Only alert if:
             # 1. GPU has processes running (ML workload present)
@@ -72,7 +72,7 @@ class BottleneckDetector:
             disk_busy = False
             for disk in storage_data.get('disk_io', []):
                 total_io = disk.get('read_mb_s', 0) + disk.get('write_mb_s', 0)
-                if total_io > 500:  # High I/O threshold
+                if total_io > config.THRESHOLDS['storage']['io_high_mbs']:  # High I/O threshold
                     disk_busy = True
                     break
             
@@ -97,7 +97,8 @@ class BottleneckDetector:
             
             # CRITICAL: Only alert if swap > 1GB AND RAM is under pressure (>85%)
             # This prevents false alerts from minimal OS swap activity
-            if swap_used_gb > 1.0 and mem_percent > 85:
+            mem_thresholds = config.THRESHOLDS['memory']
+            if swap_used_gb > mem_thresholds['swap_critical_gb'] and mem_percent > mem_thresholds['swap_critical_ram_pct']:
                 bottlenecks.append({
                     'type': 'swap_active',
                     'severity': 'critical',
@@ -112,7 +113,7 @@ class BottleneckDetector:
                         'ram_percent': mem_percent,
                     }
                 })
-            elif swap_used_gb > 0.5 and mem_percent > 75:
+            elif swap_used_gb > mem_thresholds['swap_warning_gb'] and mem_percent > mem_thresholds['swap_warning_ram_pct']:
                 # WARNING: Moderate swap with moderate RAM pressure
                 bottlenecks.append({
                     'type': 'swap_warning',
@@ -128,7 +129,7 @@ class BottleneckDetector:
             
             # 4. High memory usage warning
             # mem_percent is already defined above
-            if mem_percent > 90:
+            if mem_percent > mem_thresholds['usage_high']:
                 bottlenecks.append({
                     'type': 'high_memory',
                     'severity': 'warning',
@@ -181,7 +182,7 @@ class BottleneckDetector:
             
             # Only alert about PCIe if GPU is actually being used (>25% util)
             # During idle, Gen1 is normal power management (ASPM)
-            if pcie_gen and max_pcie_gen and pcie_gen < max_pcie_gen and gpu_util > 25:
+            if pcie_gen and max_pcie_gen and pcie_gen < max_pcie_gen and gpu_util > config.THRESHOLDS['gpu']['pcie_active_util_min']:
                 bottlenecks.append({
                     'type': 'pcie_degraded',
                     'severity': 'warning',
@@ -212,7 +213,7 @@ class BottleneckDetector:
             
             # 8. VRAM near capacity
             vram_pct = gpu.get('memory_util_pct', 0)
-            if vram_pct > 95:
+            if vram_pct > config.THRESHOLDS['gpu']['vram_critical_pct']:
                 bottlenecks.append({
                     'type': 'vram_full',
                     'severity': 'critical',
