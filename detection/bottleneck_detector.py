@@ -52,7 +52,8 @@ class BottleneckDetector:
             gpu_mem_util = gpu.get('memory_util', 0)
 
             # 1. GPU underutilization + High CPU = Data preprocessing bottleneck
-            # FIX BUG-C12: Only alert if GPU has active ML processes running
+            # Require an active ML workload before alerting, so idle monitoring
+            # (no processes on the GPU at all) doesn't false-trigger this check.
             # 'utilization_total' is a required, always-present CPUMetrics
             # field (no error-shape variant for CPU) -- subscript directly.
             cpu_util = cpu_data['utilization_total']
@@ -113,7 +114,9 @@ class BottleneckDetector:
                 })
             
             # 3. Swap usage detected (CRITICAL for ML - but only if significant)
-            # FIX BUG-C01: Increase threshold and require RAM pressure to avoid false alerts
+            # Require both a real swap size AND RAM pressure before alerting --
+            # a little OS swap activity with plenty of free RAM is normal and
+            # not worth interrupting the user over.
             # 'swap_used_gb'/'percent' are required, always-present
             # MemoryMetrics fields (no error-shape variant for memory) --
             # subscript directly.

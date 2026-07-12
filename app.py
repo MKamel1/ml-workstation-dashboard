@@ -104,7 +104,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     print(f"[CRITICAL] {max_consecutive_errors} consecutive errors, closing connection")
                     break
             
-            # FIX NEW-ENH-04: Store latest metrics for export
+            # Keep the most recent sample around so /api/export can serve it on demand
             global latest_metrics
             latest_metrics = metrics.copy()
             
@@ -202,7 +202,7 @@ async def get_history(start: int = None, end: int = None, limit: int = 1000):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-# FIX NEW-ENH-04 & NEW-BUG-21: Global variable for latest metrics
+# Holds the last metrics sample sent over the websocket, for /api/export
 latest_metrics = {}
 
 @app.get("/api/db/stats")
@@ -217,7 +217,7 @@ async def get_db_stats():
 
 @app.get("/api/export")
 def export_current_metrics():
-    """FIX NEW-ENH-04: Export current metrics as downloadable JSON."""
+    """Export the most recent metrics sample as a downloadable JSON file."""
     from datetime import datetime
     
     if not latest_metrics:

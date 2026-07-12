@@ -8,10 +8,10 @@
 
 let ws = null;
 let reconnectInterval = null;
-let isConnecting = false;  // Prevent duplicate connections (BUG-C01 fix)
+let isConnecting = false;  // Guards connectWebSocket() against overlapping reconnect attempts
 let charts = {};
 
-// Per-GPU history tracking (BUG-C02 fix)
+// Keyed per GPU index so multi-GPU systems get independent chart history instead of sharing one series
 let gpuHistories = {};  // { 0: {gpu_util: [], gpu_temp: [], timestamps: []}, 1: {...}, ... }
 
 // Global history for CPU and memory
@@ -25,7 +25,7 @@ const MAX_HISTORY_POINTS = 60; // 60 seconds of history
 
 // Note: DOMContentLoaded initialization moved to bottom of file
 
-// FIX NEW-BUG-13: Connection uptime tracking
+// Connection uptime tracking
 let connectionStartTime = null;
 let uptimeInterval = null;
 
@@ -59,11 +59,10 @@ function initCPUChart() {
                         grid: { color: getChartThemeColors().gridColor }
                     },
                     x: {
-                        // FIX NEW-BUG-06: Reduced from 6 to 4 to prevent label overlap
+                        // Capped at 4 labels to avoid overlap on the x-axis
                         ticks: { color: getChartThemeColors().tickColor, maxTicksLimit: 4 },
                         grid: {
                             color: getChartThemeColors().gridColor,
-                            // FIX NEW-BUG-12: Add vertical grid lines
                             display: true
                         }
                     }
@@ -136,7 +135,7 @@ function updateCharts(metrics) {
 }
 
 function connectWebSocket() {
-    // Prevent duplicate connections with explicit state flag (BUG-C01 fix)
+    // Bail out if a connection attempt is already in flight
     if (isConnecting) {
         console.log('[WebSocket] Already connecting, ignoring duplicate request');
         return;
@@ -192,7 +191,6 @@ function connectWebSocket() {
         ws = null;
         isConnecting = false;  // Clear flag on close
 
-        // FIX NEW-BUG-13: Stop uptime counter
         stopUptimeCounter();
         connectionStartTime = null;
 
@@ -209,7 +207,7 @@ function connectWebSocket() {
     };
 }
 
-// FIX NEW-BUG-13: Uptime tracking functions
+// Uptime tracking functions
 function startUptimeCounter() {
     stopUptimeCounter(); // Clear any existing
     uptimeInterval = setInterval(updateUptimeDisplay, 1000);
@@ -549,7 +547,6 @@ function updateSingleGPU(gpu, index) {
         clockEl.textContent = `${gpu.clock_graphics_mhz} / ${gpu.max_clock_graphics_mhz || '-'} MHz`;
     }
 
-    // FIX NEW-ENH-01 & NEW-BUG-07: Display Memory Clock (already collected in backend)
     const memClockEl = document.getElementById(`gpu-${index}-mem-clock`);
     if (memClockEl && gpu.clock_mem_mhz) {
         memClockEl.textContent = `${gpu.clock_mem_mhz} / ${gpu.max_clock_mem_mhz || '-'} MHz`;
@@ -561,9 +558,9 @@ function updateSingleGPU(gpu, index) {
         const pcieText = `Gen${gpu.pcie_gen || '?'} x${gpu.pcie_width || '?'}`;
         pcieEl.textContent = pcieText;
 
-        // Color-code based on whether PCIe is degraded under load
-        // FIX NEW-BUG-04: Gen1 at idle is normal (ASPM power saving)
-        // Only warn if Gen < Max while GPU is actively being used
+        // Color-code based on whether PCIe is degraded under load.
+        // Gen1 at idle is normal (ASPM power saving), so only warn if
+        // Gen < Max while the GPU is actively being used.
         if (gpu.pcie_gen && gpu.max_pcie_gen && gpu.pcie_gen < gpu.max_pcie_gen) {
             // Check if GPU is actually being used (>10% utilization)
             if (gpu.gpu_util > 10) {
@@ -635,7 +632,7 @@ function updateCPUPanel(cpu) {
 
     updateProgressBar('cpu-util-bar', cpu.utilization_total, 80);
 
-    // Per-core utilization (BUG-C08 fix: use single source of truth)
+    // Per-core utilization
     const perCoreEl = document.getElementById('cpu-per-core');
     if (perCoreEl && cpu.per_core_utils && Array.isArray(cpu.per_core_utils)) {
         perCoreEl.innerHTML = cpu.per_core_utils.map((util, index) => {
@@ -727,7 +724,6 @@ function updateMemoryPanel(memory) {
 
     const activeInactiveEl = document.getElementById('memory-active-inactive');
     if (activeInactiveEl && memory.active_gb !== undefined) {
-        // FIX NEW-BUG-02 & NEW-BUG-09: Added "GB" unit and rounded to 2 decimal places
         const activeGB = memory.active_gb.toFixed(2);
         const inactiveGB = (memory.inactive_gb || 0).toFixed(2);
         activeInactiveEl.innerHTML = `<span style="color: var(--success);">${activeGB} GB</span> / <span style="color: var(--text-secondary);">${inactiveGB} GB</span>`;
@@ -745,7 +741,7 @@ function updateStoragePanel(storage) {
         updateProgressBar('storage-bar', mainPartition.percent, 85);
     }
 
-    // Disk I/O - FIX NEW-BUG-03: Show more precision or use KB/s for small values
+    // Disk I/O
     const diskIO = storage.disk_io || [];
     if (diskIO.length > 0) {
         const totalRead = diskIO.reduce((sum, d) => sum + d.read_mb_s, 0);
@@ -907,7 +903,6 @@ function updateAlertsPanel(newAlerts) {
         const sortedAlerts = Array.from(activeAlerts.values())
             .sort((a, b) => severityOrder[a.alert.severity] - severityOrder[b.alert.severity]);
 
-        // FIX NEW-BUG-01: Removed extra spaces in template literal (was "< div class= " which broke HTML)
         newHTML = sortedAlerts.map(({ alert }) => `
             <div class="alert ${alert.severity}">
                 <div class="alert-title">${alert.title}</div>
@@ -966,7 +961,7 @@ function updateProgressBar(elementId, value, warningThreshold = 80, maxValue = 1
     }
 }
 
-// FIX NEW-ENH-02: Copy-to-clipboard for metrics
+// Copy-to-clipboard for metrics
 function initCopyToClipboard() {
     // Add click listeners to all metric values
     const metricSelectors = [
@@ -1043,7 +1038,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initCPUChart();
     connectWebSocket();
 
-    // FIX NEW-ENH-02: Initialize copy-to-clipboard
     setTimeout(initCopyToClipboard, 1000); // Wait for metrics to populate
 });
 
@@ -1145,7 +1139,7 @@ function updateFansPanel(gpu_data, fans_data) {
     });
 }
 
-// FIX NEW-ENH-04: Export current metrics as JSON
+// Export current metrics as JSON
 async function exportMetrics() {
     try {
         const response = await fetch('/api/export');
