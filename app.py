@@ -17,7 +17,7 @@ from metrics.fan_metrics import get_system_fan_metrics
 
 # Import detectors
 from detection.bottleneck_detector import detect_bottlenecks
-from detection.anomaly_detector import detect_anomalies
+from detection.anomaly_detector import get_anomaly_detector
 
 # Import database
 from database import get_database
@@ -137,10 +137,13 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 
-def collect_all_metrics() -> dict:
-    """Collect all system metrics and run detection algorithms."""
-    
-    # Collect raw metrics
+def collect_raw_metrics() -> dict:
+    """Collect raw system metrics and run (pure) bottleneck detection.
+
+    Safe to call from anywhere, any number of times -- unlike
+    collect_all_metrics(), this does not touch the stateful anomaly
+    detector's rolling window.
+    """
     metrics = {
         "timestamp": time.time(),  # Unix epoch timestamp for database queries
         "gpu": get_gpu_metrics(),
@@ -150,18 +153,34 @@ def collect_all_metrics() -> dict:
         "ml": get_ml_metrics(),
         "fans": get_system_fan_metrics(),  # System fans (motherboard sensors)
     }
-    
-    # Run detection algorithms
     metrics["bottlenecks"] = detect_bottlenecks(metrics)
-    metrics["anomalies"] = detect_anomalies(metrics)
-    
+    return metrics
+
+
+def collect_all_metrics() -> dict:
+    """Collect all system metrics and run detection algorithms, including the
+    stateful anomaly detector.
+
+    This feeds the live anomaly detector's rolling window (see
+    detection/anomaly_detector.py), so it must only be called from the real
+    periodic tick -- currently the /ws streaming loop. Any other caller that
+    just wants current metrics should use collect_raw_metrics() instead, so
+    it doesn't skew the live anomaly baseline.
+    """
+    metrics = collect_raw_metrics()
+    metrics["anomalies"] = get_anomaly_detector().update(metrics)
     return metrics
 
 
 @app.get("/api/metrics")
 async def get_current_metrics():
-    """REST endpoint to get current metrics (for debugging)."""
-    return collect_all_metrics()
+    """REST endpoint to get current metrics (for debugging).
+
+    Does not run anomaly detection: anomalies depend on the live rolling
+    window driven by the /ws stream, and an ad-hoc debug poll here must not
+    perturb that window. Anomalies are only available via the /ws stream.
+    """
+    return collect_raw_metrics()
 
 
 @app.get("/api/config")
