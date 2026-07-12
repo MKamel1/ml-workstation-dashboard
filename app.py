@@ -49,6 +49,12 @@ async def periodic_cleanup():
         print(f"Cleaned up {deleted} old metric records")
 
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop accepting new writes, drain the queued ones, and close the database connection."""
+    await asyncio.to_thread(db.close)
+
+
 @app.get("/")
 async def read_root():
     """Serve the main dashboard page."""
