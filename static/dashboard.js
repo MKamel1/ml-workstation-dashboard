@@ -1216,7 +1216,13 @@ function applyLightingState(state) {
 async function loadLightingState() {
     try {
         const response = await fetch('/api/lighting');
-        applyLightingState(await response.json());
+        const data = await response.json();
+        if (!response.ok) {
+            console.error('Failed to load lighting state:', data.error);
+            applyLightingState({ available: false, power: 'off', color: '#000000' });
+            return;
+        }
+        applyLightingState(data);
     } catch (error) {
         console.error('Failed to load lighting state:', error);
         applyLightingState({ available: false, power: 'off', color: '#000000' });

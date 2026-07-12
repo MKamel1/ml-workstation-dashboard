@@ -222,7 +222,10 @@ async def get_config():
 @app.get("/api/lighting")
 async def get_lighting():
     """Get the current RGB lighting state (power + color)."""
-    return get_lighting_controller().get_state()
+    try:
+        return get_lighting_controller().get_state()
+    except Exception as e:
+        return JSONResponse(content={"error": f"Lighting state read failed: {e}"}, status_code=500)
 
 
 @app.post("/api/lighting")
@@ -230,12 +233,17 @@ async def set_lighting(payload: dict):
     """Set RGB lighting power/color. Body: {"power": "on"|"off", "color"?: "#rrggbb"}."""
     power = payload.get("power")
     if power == "off":
-        return get_lighting_controller().turn_off()
+        try:
+            return get_lighting_controller().turn_off()
+        except Exception as e:
+            return JSONResponse(content={"error": f"Turning off lighting failed: {e}"}, status_code=500)
     elif power == "on":
         try:
             return get_lighting_controller().set_color(payload.get("color", "#ffffff"))
         except ValueError as e:
             return JSONResponse(content={"error": str(e)}, status_code=400)
+        except Exception as e:
+            return JSONResponse(content={"error": f"Setting lighting color failed: {e}"}, status_code=500)
     else:
         return JSONResponse(content={"error": "payload.power must be 'on' or 'off'"}, status_code=400)
 

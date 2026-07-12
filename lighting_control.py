@@ -11,12 +11,22 @@ rather than hand-rolling OpenRGB's network protocol.
 """
 
 import re
+import time
 from typing import TypedDict
 
 from openrgb import OpenRGBClient
 from openrgb.utils import RGBColor
 
 from util import lazy_singleton
+
+# Some RGB controller firmware (this ASRock Polychrome device included)
+# won't accept a color write immediately after a mode-switch command --
+# observed as the write silently having no visible effect despite the SDK
+# reporting success. A brief pause after set_mode() before set_color()
+# avoids that race. ponytail: a fixed guess, not a measured minimum -- raise
+# it if colors still don't stick; hardware timing like this needs
+# calibration a static number can't fully capture.
+_MODE_SWITCH_SETTLE_SECONDS = 0.15
 
 _HEX_COLOR_RE = re.compile(r'^#?[0-9a-fA-F]{6}$')
 
@@ -60,42 +70,44 @@ class LightingController:
         OpenRGB server (not a locally-tracked shadow state), so this stays
         correct even if something else (OpenRGB's own GUI, another tool)
         changed the lights since this dashboard last set them.
+
+        Raises whatever the underlying SDK call raises rather than
+        swallowing it into a fake "off"/unavailable-looking result -- a
+        real failure here must be visibly distinguishable from a real,
+        successful "off" read, not silently indistinguishable from one.
         """
         if not self.is_available():
             return {"available": False, "power": "off", "color": "#000000"}
-        try:
-            self.client.update()
-            primary = self.client.devices[0]
-            is_on = primary.modes[primary.active_mode].name.lower() != 'off'
-            if is_on and primary.colors:
-                c = primary.colors[0]
-                color = f"#{c.red:02x}{c.green:02x}{c.blue:02x}"
-            else:
-                color = "#000000"
-            return {"available": True, "power": "on" if is_on else "off", "color": color}
-        except Exception as e:
-            print(f"[WARNING] Lighting state read failed: {e}")
-            return {"available": False, "power": "off", "color": "#000000"}
+        self.client.update()
+        primary = self.client.devices[0]
+        is_on = primary.modes[primary.active_mode].name.lower() != 'off'
+        if is_on and primary.colors:
+            c = primary.colors[0]
+            color = f"#{c.red:02x}{c.green:02x}{c.blue:02x}"
+        else:
+            color = "#000000"
+        return {"available": True, "power": "on" if is_on else "off", "color": color}
 
     def set_color(self, color_hex: str) -> LightingState:
-        """Turn every device on and set it to `color_hex` via Direct mode."""
+        """Turn every device on and set it to `color_hex` via Direct mode.
+
+        Propagates any hardware/SDK error instead of catching it -- see
+        get_state()'s docstring for why silently swallowing it here would be
+        worse than letting the caller (the API layer) see the real failure.
+        """
         rgb = _parse_hex_color(color_hex)  # validate before touching hardware
         if self.is_available():
-            try:
-                for dev in self.client.devices:
-                    dev.set_mode('direct')
-                    dev.set_color(rgb)
-            except Exception as e:
-                print(f"[WARNING] Setting lighting color failed: {e}")
+            for dev in self.client.devices:
+                dev.set_mode('direct')
+                time.sleep(_MODE_SWITCH_SETTLE_SECONDS)
+                dev.set_color(rgb)
         return self.get_state()
 
     def turn_off(self) -> LightingState:
+        """Propagates any hardware/SDK error -- see get_state()'s docstring."""
         if self.is_available():
-            try:
-                for dev in self.client.devices:
-                    dev.set_mode('off')
-            except Exception as e:
-                print(f"[WARNING] Turning off lighting failed: {e}")
+            for dev in self.client.devices:
+                dev.set_mode('off')
         return self.get_state()
 
 

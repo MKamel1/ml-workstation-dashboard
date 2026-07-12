@@ -39,6 +39,11 @@ if controller.is_available():
     assert on_state["color"] == "#123456", f"expected #123456, got {on_state['color']}"
 
     off_state = controller.turn_off()
+    # Also assert `available` here, not just `power` -- a silently-swallowed
+    # failure used to fall back to {"available": False, "power": "off", ...},
+    # which would make a genuine error look identical to a successful "off"
+    # if only `power` were checked. Asserting `available` closes that gap.
+    assert off_state["available"] is True
     assert off_state["power"] == "off"
 
     print("tests/test_lighting_control.py passed (hex validation + real hardware round-trip)")
