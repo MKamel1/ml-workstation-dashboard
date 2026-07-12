@@ -206,20 +206,34 @@ class MetricsDatabase:
             finally:
                 conn.close()
 
-            # Convert to list of dicts
+            # Convert to list of dicts, remapping the flat cpu_*/memory_* columns
+            # back into the nested {"cpu": {...}, "memory": {...}} shape that
+            # metrics/schema.py's CPUMetrics/MemoryMetrics define and that the
+            # live /ws and /api/metrics paths already send. Only the four
+            # scalar fields of each that are actually persisted (see
+            # insert_metrics) are present -- this is a subset of the full
+            # CPUMetrics/MemoryMetrics TypedDicts, not the complete shape,
+            # since the other fields (cores, brand, swap_total_gb, ...) were
+            # never stored as columns. gpu/storage/ml/bottlenecks/anomalies
+            # are stored as JSON blobs already matching metrics/schema.py, so
+            # they need no remapping.
             results = []
             for row in rows:
                 results.append({
                     'timestamp': row[0],
                     'gpu': json.loads(row[1]) if row[1] else [],
-                    'cpu_util': row[2],
-                    'cpu_freq': row[3],
-                    'cpu_temp': row[4],
-                    'cpu_load_1min': row[5],
-                    'memory_used_gb': row[6],
-                    'memory_total_gb': row[7],
-                    'memory_percent': row[8],
-                    'swap_used_gb': row[9],
+                    'cpu': {
+                        'utilization_total': row[2],
+                        'frequency_current_mhz': row[3],
+                        'temperature': row[4],
+                        'load_1min': row[5],
+                    },
+                    'memory': {
+                        'used_gb': row[6],
+                        'total_gb': row[7],
+                        'percent': row[8],
+                        'swap_used_gb': row[9],
+                    },
                     'storage': json.loads(row[10]) if row[10] else {},
                     'ml': json.loads(row[11]) if row[11] else {},
                     'bottlenecks': json.loads(row[12]) if row[12] else [],
