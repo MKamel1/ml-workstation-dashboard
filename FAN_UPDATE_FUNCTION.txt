@@ -1,0 +1,68 @@
+// Add this to dashboard.js after updateMLPanel function
+
+function updateFansPanel(gpu_data, fans_data) {
+    // Update GPU fan
+    const gpuFanEl = document.getElementById('fan-gpu');
+    const gpuFan = gpu_data && gpu_data.length > 0 ? gpu_data[0].fan_speed_pct : null;
+    
+    if (gpuFanEl) {
+        if (gpuFan !== null && gpuFan !== undefined) {
+            gpuFanEl.textContent = `${gpuFan}%`;
+            updateProgressBar('fan-gpu-bar', gpuFan);
+        } else {
+            gpuFanEl.textContent = '-';
+        }
+    }
+
+    // Update system fans  
+    const systemFansContainer = document.getElementById('system-fans-container');
+    if (!systemFansContainer || !fans_data || !fans_data.available) {
+        return;
+    }
+
+    const fans = fans_data.fans || [];
+    
+    // Build HTML for system fans
+    let html = '';
+    fans.forEach(fan => {
+        const fanId = `system-fan-${fan.index}`;
+        const rpm = fan.rpm || 0;
+        const pwmPct = fan.pwm_pct || 0;
+        
+        // Display name based on type
+        let displayName = fan.label;
+        if (fan.type === 'aio_pump') {
+            displayName = `🌊 AI O Pump`;
+        } else if (fan.type === 'case_front') {
+            displayName = `⬅️ Case Front`;
+        } else if (fan.type === 'case_rear') {
+            displayName = `➡️ Case Rear`;
+        } else if (fan.type === 'aio_fan') {
+            displayName = `❄️ AIO Fan`;
+        }
+        
+        html += `
+            <div class="metric">
+                <div class="metric-label">${displayName}</div>
+                <div class="metric-value" id="${fanId}">${rpm} RPM</div>
+                <div class="progress-bar" id="${fanId}-bar">
+                    <div class="progress-fill"></div>
+                </div>
+            </div>
+        `;
+    });
+    
+    systemFansContainer.innerHTML = html;
+    
+    // Update progress bars
+    fans.forEach(fan => {
+        const fanId = `system-fan-${fan.index}`;
+        const pwmPct = fan.pwm_pct || 0;
+        updateProgressBar(`${fanId}-bar`, pwmPct);
+    });
+}
+
+// Add to updateDashboard function after updateMLPanel call:
+// if (metrics.fans) {
+//     updateFansPanel(metrics.gpu, metrics.fans);
+// }

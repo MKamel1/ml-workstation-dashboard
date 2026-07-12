@@ -1,0 +1,21 @@
+[Unit]
+Description=ML Workstation Health Dashboard
+After=network.target
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+WorkingDirectory=/home/omar/ai-projects/workstation-dashboard
+Environment="PATH=/home/omar/ai-projects/workstation-dashboard/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/omar/ai-projects/workstation-dashboard/venv/bin/python /home/omar/ai-projects/workstation-dashboard/app.py
+Restart=on-failure
+RestartSec=5s
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ml-dashboard
+
+[Install]
+WantedBy=default.target

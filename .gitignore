@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+*.log
+workstation_metrics.db
+workstation_metrics.db-shm
+workstation_metrics.db-wal
+database/__init__.py.broken
+gpu-burn/

@@ -1,0 +1,31 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ML Dashboard
+Comment=ML Workstation Health Monitoring Dashboard
+Exec=/home/omar/ai-projects/workstation-dashboard/dashboard.sh start && sleep 1 && xdg-open http://localhost:8000
+Icon=/home/omar/ai-projects/workstation-dashboard/ml-dashboard-icon.png
+Terminal=false
+Categories=System;Monitor;Development;
+Keywords=dashboard;monitoring;gpu;ml;machine-learning;
+Actions=Start;Stop;Restart;Status;OpenBrowser;
+
+[Desktop Action Start]
+Name=Start Dashboard
+Exec=/home/omar/ai-projects/workstation-dashboard/dashboard.sh start
+
+[Desktop Action Stop]
+Name=Stop Dashboard
+Exec=/home/omar/ai-projects/workstation-dashboard/dashboard.sh stop
+
+[Desktop Action Restart]
+Name=Restart Dashboard
+Exec=/home/omar/ai-projects/workstation-dashboard/dashboard.sh restart
+
+[Desktop Action Status]
+Name=Check Status
+Exec=bash -c "/home/omar/ai-projects/workstation-dashboard/dashboard.sh status | zenity --text-info --title='ML Dashboard Status' --width=600 --height=400"
+
+[Desktop Action OpenBrowser]
+Name=Open in Browser
+Exec=xdg-open http://localhost:8000

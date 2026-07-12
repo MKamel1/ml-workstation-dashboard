@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workstation Health Dashboard</title>
+    <link rel="stylesheet" href="/static/dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <!-- Header -->
+    <div class="header">
+        <h1>🖥️ ML Workstation Health Dashboard</h1>
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot"></div>
+                <span>Live Monitoring</span>
+            </div>
+            <div class="status-item">
+                <span>Update Interval: 1s</span>
+            </div>
+            <!-- Theme Switcher Controls -->
+            <div class="theme-switcher" role="group" aria-label="Theme mode selection">
+                <button type="button" class="theme-btn active" id="theme-btn-dark" onclick="setTheme('dark')" title="Dark Theme">🌙 Dark</button>
+                <button type="button" class="theme-btn" id="theme-btn-light" onclick="setTheme('light')" title="Light Theme">☀️ Light</button>
+                <button type="button" class="theme-btn" id="theme-btn-auto" onclick="setTheme('auto')" title="Auto (System Theme)">🌓 Auto</button>
+            </div>
+            <!-- FIX NEW-ENH-04: Export button -->
+            <button onclick="exportMetrics()" class="export-button" title="Export current metrics as JSON">
+                📊 Export
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+
+        <!-- Alerts Section (Full Width) -->
+        <div class="dashboard-grid wide">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">⚡ Active Alerts & Bottlenecks</h2>
+                </div>
+                <div id="alerts-list" class="alerts-container">
+                    <div style="color: var(--text-secondary); text-align: center; padding: 2rem;">Waiting for data...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GPU Section -->
+        <div class="dashboard-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">🎮 GPU Metrics</h2>
+                    <div id="gpu-tabs" class="gpu-tabs"></div>
+                </div>
+
+                <div id="gpu-containers"></div>
+            </div>
+
+            <!-- CPU Section -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">⚙️ CPU Metrics</h2>
+                    <span class="panel-badge" id="cpu-name">Loading...</span>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric">
+                        <div class="metric-label">Utilization</div>
+                        <div class="metric-value" id="cpu-util">-</div>
+                        <div class="progress-bar" id="cpu-util-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Frequency</div>
+                        <div class="metric-value" id="cpu-freq" style="font-size: 1.1rem;">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Temperature</div>
+                        <div class="metric-value" id="cpu-temp">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Load (1min)</div>
+                        <div class="metric-value" id="cpu-load">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">Per-Core Utilization</div>
+                    <div id="cpu-per-core" class="cores-grid">
+                        <div style="color: var(--text-secondary);">Waiting for data...</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">CPU Features</div>
+                    <div id="cpu-features" style="font-size: 0.9rem; color: var(--accent); margin-top: 0.5rem;">-</div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">CPU Utilization History (60s)</div>
+                    <div class="chart-container">
+                        <canvas id="cpu-util-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fans Section -->
+        <div class="dashboard-grid wide">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">🌀 Fan System</h2>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric">
+                        <div class="metric-label">GPU Fan</div>
+                        <div class="metric-value" id="fan-gpu">-</div>
+                        <div class="progress-bar" id="fan-gpu-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                    </div>
+
+                    <div id="system-fans-container">
+                        <!-- System fans will be added dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory & Storage -->
+        <div class="dashboard-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">💾 Memory</h2>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric">
+                        <div class="metric-label">Usage</div>
+                        <div class="metric-value" id="memory-used" style="font-size: 1.1rem;">-</div>
+                        <div class="progress-bar" id="memory-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Available</div>
+                        <div class="metric-value" id="memory-available" style="font-size: 1.1rem;">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Utilization</div>
+                        <div class="metric-value" id="memory-percent">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">Swap Status</div>
+                    <div id="memory-swap" style="font-size: 1rem; font-weight: 600; margin-top: 0.5rem;">-</div>
+                </div>
+
+                <div class="metrics-row" style="margin-top: 1rem;">
+                    <div class="metric">
+                        <div class="metric-label">RAM Speed</div>
+                        <div class="metric-value" id="memory-speed" style="font-size: 0.9rem;">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">NUMA Nodes</div>
+                        <div class="metric-value" id="memory-numa" style="font-size: 0.9rem;">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Active/Inactive</div>
+                        <div class="metric-value" id="memory-active-inactive" style="font-size: 0.85rem;">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">💿 Storage</h2>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric">
+                        <div class="metric-label">Usage</div>
+                        <div class="metric-value" id="storage-used" style="font-size: 1.1rem;">-</div>
+                        <div class="progress-bar" id="storage-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Free Space</div>
+                        <div class="metric-value" id="storage-free" style="font-size: 1.1rem;">-</div>
+                    </div>
+                </div>
+
+                <div class="metrics-row" style="margin-top: 1.5rem;">
+                    <div class="metric">
+                        <div class="metric-label">Read Speed</div>
+                        <div class="metric-value" id="storage-read" style="font-size: 1.1rem;">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Write Speed</div>
+                        <div class="metric-value" id="storage-write" style="font-size: 1.1rem;">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">HF Cache</div>
+                        <div class="metric-value" id="storage-hf-cache" style="font-size: 1.1rem;">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ML Workloads -->
+        <div class="dashboard-grid wide">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">🤖 ML Framework Status</h2>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric">
+                        <div class="metric-label">CUDA Version</div>
+                        <div class="metric-value" id="ml-cuda" style="font-size: 1.1rem;">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">Active ML Processes</div>
+                    <div id="ml-processes" class="process-list" style="margin-top: 0.5rem;">
+                        <div style="color: var(--text-secondary);">Waiting for data...</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">Installed ML Packages</div>
+                    <div id="ml-packages" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem;">-</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Connection Status -->
+    <div id="connection-status" class="connection-status disconnected">
+        <div class="status-dot"></div>
+        Connecting...
+    </div>
+
+    <script src="/static/dashboard.js"></script>
+</body>
+
+</html>
