@@ -5,14 +5,21 @@ import os
 from typing import Dict, List
 from pathlib import Path
 
+# How long to reuse a computed HuggingFace cache size before re-walking the
+# directory tree. The cache is large and rarely changes tick-to-tick, so a
+# full rglob() walk every ~1s collection cycle is wasted work.
+HF_CACHE_SIZE_TTL_SECONDS = 60
+
 
 class StorageMetricsCollector:
     """Collects storage I/O and health metrics."""
-    
+
     def __init__(self):
         """Initialize storage tracking."""
         self.previous_io = psutil.disk_io_counters(perdisk=True)
         self.previous_time = None
+        self._hf_cache_size_gb = 0
+        self._hf_cache_computed_at = 0.0
         
     def collect(self) -> Dict:
         """Collect storage metrics."""
@@ -35,7 +42,7 @@ class StorageMetricsCollector:
                         "free_gb": round(usage.free / (1024**3), 2),
                         "percent": round(usage.percent, 1),
                     })
-                except:
+                except Exception:
                     continue
         
         # I/O statistics
@@ -68,20 +75,26 @@ class StorageMetricsCollector:
         self.previous_io = current_io
         self.previous_time = current_time
         
-        # HuggingFace cache size (ML-specific)
-        hf_cache_size_gb = 0
-        hf_cache_path = Path.home() / '.cache' / 'huggingface'
-        if hf_cache_path.exists():
-            try:
-                total_size = sum(f.stat().st_size for f in hf_cache_path.rglob('*') if f.is_file())
-                hf_cache_size_gb = round(total_size / (1024**3), 2)
-            except:
-                pass
-        
+        # HuggingFace cache size (ML-specific) - recomputed at most once per
+        # HF_CACHE_SIZE_TTL_SECONDS since it's a full recursive filesystem walk.
+        if (current_time - self._hf_cache_computed_at) >= HF_CACHE_SIZE_TTL_SECONDS:
+            hf_cache_path = Path.home() / '.cache' / 'huggingface'
+            if hf_cache_path.exists():
+                try:
+                    total_size = sum(f.stat().st_size for f in hf_cache_path.rglob('*') if f.is_file())
+                    self._hf_cache_size_gb = round(total_size / (1024**3), 2)
+                except Exception:
+                    # Unavailable (e.g. permission error) - distinct from a
+                    # genuinely empty/missing cache, which stays 0 below.
+                    self._hf_cache_size_gb = None
+            else:
+                self._hf_cache_size_gb = 0
+            self._hf_cache_computed_at = current_time
+
         return {
             "partitions": partitions,
             "disk_io": disk_io,
-            "huggingface_cache_gb": hf_cache_size_gb,
+            "huggingface_cache_gb": self._hf_cache_size_gb,
         }
 
 

@@ -1,9 +1,14 @@
 """NVIDIA GPU metrics collector using NVML."""
 
+import logging
 import pynvml
 from typing import Dict, List, Optional
 import time
 import psutil
+
+from metrics._util import safe_read
+
+logger = logging.getLogger(__name__)
 
 
 class GPUMetricsCollector:
@@ -78,8 +83,14 @@ class GPUMetricsCollector:
         
         return 0  # No tensor cores
     
-    def _estimate_fp32_tflops(self, device_name: str, cuda_cores: int, clock_mhz: int) -> float:
-        """Estimate FP32 TFLOPS performance."""
+    def _estimate_fp32_tflops(self, device_name: str, cuda_cores: int, clock_mhz: Optional[int]) -> Optional[float]:
+        """Estimate FP32 TFLOPS performance.
+
+        Returns None if clock_mhz is unavailable (failed NVML read) rather
+        than a misleading 0.0 - the two cases are not the same thing.
+        """
+        if clock_mhz is None:
+            return None
         if cuda_cores == 0 or clock_mhz == 0:
             return 0.0
         
@@ -122,38 +133,33 @@ class GPUMetricsCollector:
         mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
         
         # Temperature
-        try:
-            temperature = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-        except:
-            temperature = None
-        
+        temperature = safe_read(lambda: pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU))
+
         # Fan Speed
-        try:
-            fan_speed_pct = pynvml.nvmlDeviceGetFanSpeed(handle)  # Returns 0-100
-        except:
-            fan_speed_pct = None
-        
-        # Power
+        fan_speed_pct = safe_read(lambda: pynvml.nvmlDeviceGetFanSpeed(handle))  # Returns 0-100
+
+        # Power - None (not 0) on failure, so a failed read is distinguishable
+        # from a genuinely idle GPU drawing ~0W.
         try:
             power_draw = pynvml.nvmlDeviceGetPowerUsage(handle)  # mW
             power_limit = pynvml.nvmlDeviceGetEnforcedPowerLimit(handle)  # mW
-        except:
-            power_draw, power_limit = 0, 0
-        
+        except Exception:
+            power_draw, power_limit = None, None
+
         # Clocks
         try:
             clock_graphics = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_GRAPHICS)
             clock_sm = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
             clock_mem = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
-        except:
-            clock_graphics, clock_sm, clock_mem = 0, 0, 0
-        
+        except Exception:
+            clock_graphics, clock_sm, clock_mem = None, None, None
+
         try:
             max_clock_graphics = pynvml.nvmlDeviceGetMaxClockInfo(handle, pynvml.NVML_CLOCK_GRAPHICS)
             max_clock_sm = pynvml.nvmlDeviceGetMaxClockInfo(handle, pynvml.NVML_CLOCK_SM)
             max_clock_mem = pynvml.nvmlDeviceGetMaxClockInfo(handle, pynvml.NVML_CLOCK_MEM)
-        except:
-            max_clock_graphics, max_clock_sm, max_clock_mem = 0, 0, 0
+        except Exception:
+            max_clock_graphics, max_clock_sm, max_clock_mem = None, None, None
         
         # PCIe
         try:
@@ -161,7 +167,7 @@ class GPUMetricsCollector:
             max_pcie_gen = pynvml.nvmlDeviceGetMaxPcieLinkGeneration(handle)
             pcie_width = pynvml.nvmlDeviceGetCurrPcieLinkWidth(handle)
             max_pcie_width = pynvml.nvmlDeviceGetMaxPcieLinkWidth(handle)
-        except:
+        except Exception:
             pcie_gen, max_pcie_gen, pcie_width, max_pcie_width = None, None, None, None
         
         # Throttling
@@ -177,7 +183,12 @@ class GPUMetricsCollector:
                 "hw_thermal_slowdown": bool(clocks_throttle_reasons & pynvml.nvmlClocksThrottleReasonHwThermalSlowdown),
                 "hw_power_brake_slowdown": bool(clocks_throttle_reasons & pynvml.nvmlClocksThrottleReasonHwPowerBrakeSlowdown),
             }
-        except:
+        except Exception:
+            # Kept as {} (not None) deliberately: detection/bottleneck_detector.py
+            # (out of scope here) does `gpu.get('throttle_reasons', {}).get(...)`
+            # unconditionally - since the key is present, that default only
+            # covers a *missing* key, not an explicit None, so None would crash
+            # that consumer. {} still reads as "nothing known" to callers.
             throttle_reasons = {}
         
         # Architecture detection (multi-tier fallback strategy)
@@ -235,7 +246,7 @@ class GPUMetricsCollector:
                 elif "a100" in name_lower:
                     architecture = "Ampere (A100)"
                     compute_capability = "8.0"
-            except:
+            except Exception:
                 pass
         
         # Tier 3: Try compute capability API (unreliable - may not exist in all pynvml versions)
@@ -255,7 +266,7 @@ class GPUMetricsCollector:
                         (6, 1): "Pascal",
                     }
                     architecture = arch_map.get((major, minor), f"Compute {compute_capability}")
-            except:
+            except Exception:
                 pass
         
         # Final fallback
@@ -277,7 +288,16 @@ class GPUMetricsCollector:
         
         # Real PCIe bandwidth
         pcie_bandwidth = self._measure_pcie_bandwidth(handle)
-        
+
+        # Power derived metrics - propagate None through instead of crashing
+        # or silently computing a misleading value when a read failed.
+        power_draw_w = round(power_draw / 1000, 1) if power_draw is not None else None
+        power_limit_w = round(power_limit / 1000, 1) if power_limit is not None else None
+        if power_draw is not None and power_limit is not None and power_limit > 0:
+            power_pct = round((power_draw / power_limit) * 100, 1)
+        else:
+            power_pct = None
+
         return {
             "index": index,
             "name": name,
@@ -289,9 +309,9 @@ class GPUMetricsCollector:
             "memory_util_pct": round((mem_info.used / mem_info.total) * 100, 1),
             "temperature": temperature,
             "fan_speed_pct": fan_speed_pct,
-            "power_draw_w": round(power_draw / 1000, 1),
-            "power_limit_w": round(power_limit / 1000, 1),
-            "power_pct": round((power_draw / power_limit) * 100, 1) if power_limit > 0 else 0,
+            "power_draw_w": power_draw_w,
+            "power_limit_w": power_limit_w,
+            "power_pct": power_pct,
             "clock_graphics_mhz": clock_graphics,
             "clock_sm_mhz": clock_sm,
             "clock_mem_mhz": clock_mem,
@@ -318,10 +338,10 @@ class GPUMetricsCollector:
         """Get top GPU processes with memory and compute utilization."""
         try:
             processes = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
-        except:
+        except Exception:
             try:
                 processes = pynvml.nvmlDeviceGetGraphicsRunningProcesses(handle)
-            except:
+            except Exception:
                 return []
         
         process_list = []
@@ -338,16 +358,13 @@ class GPUMetricsCollector:
                     util_sample = pynvml.nvmlDeviceGetProcessUtilization(handle, proc.pid, 1000)
                     if util_sample:
                         gpu_util_pct = util_sample[0].smUtil
-                except:
+                except Exception:
                     pass  # Not available on all systems
-                
-                # FIX BUG-C02: Calculate raw memory value, add debug logging, filter noise
+
                 memory_mb = proc.usedGpuMemory / (1024**2)  # Raw MB value
-                
-                # Debug logging to diagnose VRAM reporting issues
                 if memory_mb > 0:
-                    print(f"[GPU Process Debug] PID {proc.pid} ({name}): {memory_mb:.3f} MB raw VRAM")
-                
+                    logger.debug("PID %s (%s): %.3f MB raw VRAM", proc.pid, name, memory_mb)
+
                 # Only include processes using > 50 MB to filter noise
                 # This prevents showing many tiny allocations that obscure real memory hogs
                 if memory_mb >= 50:
@@ -423,7 +440,7 @@ class GPUMetricsCollector:
             # Convert KB/s to MB/s (NVML returns KB/s)
             total_mbps = (tx_bytes + rx_bytes) / 1024
             return round(total_mbps, 2)
-        except:
+        except Exception:
             # Feature not available on all drivers
             return None
     

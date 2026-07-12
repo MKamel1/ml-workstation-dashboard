@@ -53,7 +53,7 @@ class MemoryMetricsCollector:
                 match = re.search(r'NUMA node\(s\):\s+(\d+)', result.stdout)
                 if match:
                     return int(match.group(1))
-        except:
+        except Exception:
             pass
         return 1  # Default to 1 NUMA node
     

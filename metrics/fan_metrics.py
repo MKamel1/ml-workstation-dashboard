@@ -33,7 +33,7 @@ class SystemFanCollector:
                             fan_files = glob.glob(os.path.join(hwmon_dir, 'fan*_input'))
                             if fan_files:
                                 return hwmon_dir
-            except:
+            except Exception:
                 continue
         
         return None
@@ -54,7 +54,7 @@ class SystemFanCollector:
                 try:
                     with open(label_file, 'r') as f:
                         self.fan_labels[i] = f.read().strip()
-                except:
+                except Exception:
                     pass
     
     def _read_fan_rpm(self, fan_num: int) -> Optional[int]:
@@ -68,7 +68,7 @@ class SystemFanCollector:
                 with open(fan_file, 'r') as f:
                     rpm = int(f.read().strip())
                     return rpm  # Return actual value including 0 for inactive fans
-        except:
+        except Exception:
             pass
         
         return None
@@ -84,7 +84,7 @@ class SystemFanCollector:
                 with open(pwm_file, 'r') as f:
                     pwm = int(f.read().strip())
                     return round((pwm / 255) * 100)  # Convert to percentage
-        except:
+        except Exception:
             pass
         
         return None
@@ -153,7 +153,7 @@ class SystemFanCollector:
                 name, fan_type, desc = FAN_CONFIG[fan_num]
                 if fan_type:
                     return fan_type
-        except:
+        except Exception:
             pass
         
         # Fallback to heuristic detection
@@ -179,7 +179,7 @@ class SystemFanCollector:
                 name, fan_type, desc = FAN_CONFIG[fan_num]
                 if name:
                     return name
-        except:
+        except Exception:
             pass
         
         return f"System Fan {fan_num}"
