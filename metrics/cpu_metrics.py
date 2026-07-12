@@ -52,7 +52,7 @@ class CPUMetricsCollector:
                     if 'Tdie' in sensor.label:
                         temps['cpu'] = sensor.current
                         break
-        except:
+        except Exception:
             temps = {}
         
         # Context switches and interrupts

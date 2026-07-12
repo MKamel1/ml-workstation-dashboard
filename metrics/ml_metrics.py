@@ -45,7 +45,7 @@ class MLMetricsCollector:
             pynvml.nvmlInit()
             gpu_count = pynvml.nvmlDeviceGetCount()
             gpu_handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(gpu_count)]
-        except:
+        except Exception:
             pass
         
         # Detect active Python processes with ML frameworks
@@ -125,7 +125,7 @@ class MLMetricsCollector:
                             if gp.pid == proc.info['pid']:
                                 proc_info['gpu_vram_gb'] = round(gp.usedGpuMemory / (1024**3), 2)
                                 break
-                    except:
+                    except Exception:
                         pass
                     
                     # Try to get per-process GPU utilization (newer drivers only)
@@ -135,10 +135,10 @@ class MLMetricsCollector:
                             util_samples = pynvml.nvmlDeviceGetProcessUtilization(gpu_handle, proc.info['pid'], 1000)
                             if util_samples and len(util_samples) > 0:
                                 proc_info['gpu_util_pct'] = util_samples[0].smUtil
-                        except:
+                        except Exception:
                             pass  # Not available on all systems
                         break
-            except:
+            except Exception:
                 pass
         
         # Detect HuggingFace model from command line
@@ -174,7 +174,7 @@ class MLMetricsCollector:
                     if 'release' in line.lower():
                         version = line.split('release')[1].split(',')[0].strip()
                         return version
-        except:
+        except Exception:
             pass
         
         # Try nvidia-smi
@@ -185,7 +185,7 @@ class MLMetricsCollector:
                     if 'CUDA Version' in line:
                         version = line.split('CUDA Version:')[1].split()[0].strip()
                         return version
-        except:
+        except Exception:
             pass
         
         return None
