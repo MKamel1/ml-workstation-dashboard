@@ -7,6 +7,7 @@ import time
 import psutil
 
 from metrics._util import safe_read
+from metrics.schema import GPUMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -458,8 +459,12 @@ class GPUMetricsCollector:
 # Singleton instance
 _gpu_collector = None
 
-def get_gpu_metrics() -> List[Dict]:
-    """Get current GPU metrics for all GPUs."""
+def get_gpu_metrics() -> List[GPUMetrics]:
+    """Get current GPU metrics for all GPUs.
+
+    See metrics/schema.py:GPUMetrics for the authoritative shape of each
+    entry (a per-GPU error dict is possible too -- see that docstring).
+    """
     global _gpu_collector
     if _gpu_collector is None:
         _gpu_collector = GPUMetricsCollector()

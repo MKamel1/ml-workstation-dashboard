@@ -5,6 +5,8 @@ import cpuinfo
 import os
 from typing import Dict, List
 
+from metrics.schema import CPUMetrics
+
 
 class CPUMetricsCollector:
     """Collects detailed CPU metrics."""
@@ -117,8 +119,8 @@ class CPUMetricsCollector:
 # Singleton instance
 _cpu_collector = None
 
-def get_cpu_metrics() -> Dict:
-    """Get current CPU metrics."""
+def get_cpu_metrics() -> CPUMetrics:
+    """Get current CPU metrics. See metrics/schema.py:CPUMetrics for the shape."""
     global _cpu_collector
     if _cpu_collector is None:
         _cpu_collector = CPUMetricsCollector()

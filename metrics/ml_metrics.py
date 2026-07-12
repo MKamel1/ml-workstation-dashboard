@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from metrics.schema import MLMetrics
+
 
 class MLMetricsCollector:
     """Collects ML framework and environment metrics."""
@@ -292,8 +294,8 @@ class MLMetricsCollector:
 # Singleton instance
 _ml_collector = None
 
-def get_ml_metrics() -> Dict:
-    """Get current ML metrics."""
+def get_ml_metrics() -> MLMetrics:
+    """Get current ML metrics. See metrics/schema.py:MLMetrics for the shape."""
     global _ml_collector
     if _ml_collector is None:
         _ml_collector = MLMetricsCollector()

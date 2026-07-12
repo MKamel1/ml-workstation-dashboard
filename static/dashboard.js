@@ -1,4 +1,10 @@
 // WebSocket connection and dashboard logic
+//
+// Wire format: the `metrics` object handled below (metrics.gpu, metrics.cpu,
+// metrics.memory, metrics.storage, metrics.ml, metrics.fans, ...) is the JSON
+// serialization of MetricsSnapshot in metrics/schema.py -- that file is the
+// canonical source of truth for field names/shape. This file stays plain
+// dict-based JS; update the Python TypedDicts first if the shape changes.
 
 let ws = null;
 let reconnectInterval = null;

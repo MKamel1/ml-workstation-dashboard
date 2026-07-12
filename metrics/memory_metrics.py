@@ -5,6 +5,8 @@ import subprocess
 import re
 from typing import Dict, Optional
 
+from metrics.schema import MemoryMetrics
+
 
 class MemoryMetricsCollector:
     """Collects RAM and memory subsystem metrics."""
@@ -99,8 +101,8 @@ class MemoryMetricsCollector:
 # Singleton instance
 _memory_collector = None
 
-def get_memory_metrics() -> Dict:
-    """Get current memory metrics."""
+def get_memory_metrics() -> MemoryMetrics:
+    """Get current memory metrics. See metrics/schema.py:MemoryMetrics for the shape."""
     global _memory_collector
     if _memory_collector is None:
         _memory_collector = MemoryMetricsCollector()

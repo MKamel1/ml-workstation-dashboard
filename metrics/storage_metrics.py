@@ -5,6 +5,8 @@ import os
 from typing import Dict, List
 from pathlib import Path
 
+from metrics.schema import StorageMetrics
+
 # How long to reuse a computed HuggingFace cache size before re-walking the
 # directory tree. The cache is large and rarely changes tick-to-tick, so a
 # full rglob() walk every ~1s collection cycle is wasted work.
@@ -101,8 +103,8 @@ class StorageMetricsCollector:
 # Singleton instance
 _storage_collector = None
 
-def get_storage_metrics() -> Dict:
-    """Get current storage metrics."""
+def get_storage_metrics() -> StorageMetrics:
+    """Get current storage metrics. See metrics/schema.py:StorageMetrics for the shape."""
     global _storage_collector
     if _storage_collector is None:
         _storage_collector = StorageMetricsCollector()

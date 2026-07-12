@@ -4,6 +4,8 @@ import os
 import glob
 from typing import Dict, List, Optional
 
+from metrics.schema import FanMetrics
+
 
 class SystemFanCollector:
     """Collects system fan metrics from hwmon (motherboard sensors)."""
@@ -208,8 +210,8 @@ class SystemFanCollector:
 # Singleton instance
 _system_fan_collector = None
 
-def get_system_fan_metrics() -> Dict:
-    """Get system fan metrics."""
+def get_system_fan_metrics() -> FanMetrics:
+    """Get system fan metrics. See metrics/schema.py:FanMetrics for the shape."""
     global _system_fan_collector
     if _system_fan_collector is None:
         _system_fan_collector = SystemFanCollector()
