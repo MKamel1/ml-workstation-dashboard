@@ -14,6 +14,7 @@ from metrics.memory_metrics import get_memory_metrics
 from metrics.storage_metrics import get_storage_metrics
 from metrics.ml_metrics import get_ml_metrics
 from metrics.fan_metrics import get_system_fan_metrics
+from metrics.network_metrics import get_network_metrics
 
 # Import detectors
 from detection.bottleneck_detector import detect_bottlenecks
@@ -95,6 +96,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     "storage": {},
                     "ml": {},
                     "fans": {},
+                    "network": {},
                     "bottlenecks": [],
                     "anomalies": []
                 }
@@ -153,6 +155,7 @@ def collect_raw_metrics() -> dict:
         "storage": get_storage_metrics(),
         "ml": get_ml_metrics(),
         "fans": get_system_fan_metrics(),  # System fans (motherboard sensors)
+        "network": get_network_metrics(),
     }
     metrics["bottlenecks"] = detect_bottlenecks(metrics)
     return metrics

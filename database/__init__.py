@@ -127,7 +127,10 @@ class MetricsDatabase:
 
                 -- Alerts and detections (JSON)
                 bottlenecks TEXT,
-                anomalies TEXT
+                anomalies TEXT,
+
+                -- Network metrics (JSON)
+                network_data TEXT
             )
         ''')
 
@@ -135,6 +138,15 @@ class MetricsDatabase:
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_timestamp ON metrics (timestamp)
         ''')
+
+        # Migration for pre-existing databases created before network_data
+        # existed -- CREATE TABLE IF NOT EXISTS above is a no-op against an
+        # already-existing table, so an older DB needs the column added
+        # explicitly. Appended last so existing column indices don't shift.
+        cursor.execute("PRAGMA table_info(metrics)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+        if "network_data" not in existing_columns:
+            cursor.execute("ALTER TABLE metrics ADD COLUMN network_data TEXT")
 
         self.conn.commit()
 
@@ -158,12 +170,13 @@ class MetricsDatabase:
             ml_data = json.dumps(metrics.get('ml', {}))
             bottlenecks = json.dumps(metrics.get('bottlenecks', []))
             anomalies = json.dumps(metrics.get('anomalies', []))
+            network_data = json.dumps(metrics.get('network', {}))
 
             try:
                 # Use INSERT OR REPLACE to handle duplicate timestamps gracefully
                 cursor = self.conn.cursor()
                 cursor.execute('''
-                    INSERT OR REPLACE INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     timestamp,
                     gpu_data,
@@ -178,7 +191,8 @@ class MetricsDatabase:
                     storage_data,
                     ml_data,
                     bottlenecks,
-                    anomalies
+                    anomalies,
+                    network_data
                 ))
                 self.conn.commit()
             except Exception as e:
@@ -223,9 +237,9 @@ class MetricsDatabase:
             # insert_metrics) are present -- this is a subset of the full
             # CPUMetrics/MemoryMetrics TypedDicts, not the complete shape,
             # since the other fields (cores, brand, swap_total_gb, ...) were
-            # never stored as columns. gpu/storage/ml/bottlenecks/anomalies
-            # are stored as JSON blobs already matching metrics/schema.py, so
-            # they need no remapping.
+            # never stored as columns. gpu/storage/ml/network/bottlenecks/
+            # anomalies are stored as JSON blobs already matching
+            # metrics/schema.py, so they need no remapping.
             results = []
             for row in rows:
                 results.append({
@@ -247,6 +261,7 @@ class MetricsDatabase:
                     'ml': json.loads(row[11]) if row[11] else {},
                     'bottlenecks': json.loads(row[12]) if row[12] else [],
                     'anomalies': json.loads(row[13]) if row[13] else [],
+                    'network': json.loads(row[14]) if row[14] else {},
                 })
 
             return results
@@ -332,7 +347,7 @@ if __name__ == "__main__":
     def make_metrics(ts):
         return {
             'timestamp': ts,
-            'gpu': [], 'cpu': {}, 'memory': {}, 'storage': {}, 'ml': {},
+            'gpu': [], 'cpu': {}, 'memory': {}, 'storage': {}, 'ml': {}, 'network': {},
             'bottlenecks': [], 'anomalies': [],
         }
 

@@ -21,6 +21,7 @@ from metrics.memory_metrics import get_memory_metrics
 from metrics.storage_metrics import get_storage_metrics
 from metrics.ml_metrics import get_ml_metrics
 from metrics.fan_metrics import get_system_fan_metrics
+from metrics.network_metrics import get_network_metrics
 from metrics.schema import (
     GPUMetrics,
     CPUMetrics,
@@ -28,6 +29,7 @@ from metrics.schema import (
     StorageMetrics,
     MLMetrics,
     FanMetrics,
+    NetworkMetrics,
 )
 
 
@@ -57,6 +59,10 @@ def test_fan_metrics_matches_schema():
     assert_keys_subset(get_system_fan_metrics(), FanMetrics, "FanMetrics")
 
 
+def test_network_metrics_matches_schema():
+    assert_keys_subset(get_network_metrics(), NetworkMetrics, "NetworkMetrics")
+
+
 def test_gpu_metrics_matches_schema():
     gpus = get_gpu_metrics()
     for gpu in gpus:
@@ -69,5 +75,6 @@ if __name__ == "__main__":
     test_storage_metrics_matches_schema()
     test_ml_metrics_matches_schema()
     test_fan_metrics_matches_schema()
+    test_network_metrics_matches_schema()
     test_gpu_metrics_matches_schema()
     print("tests/test_metrics_schema.py: all collectors match metrics/schema.py")

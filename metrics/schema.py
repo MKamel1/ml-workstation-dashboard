@@ -210,6 +210,32 @@ class StorageMetrics(TypedDict):
 
 
 # ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+
+class NetworkMetrics(TypedDict):
+    """Returned by get_network_metrics() (metrics/network_metrics.py).
+
+    Live throughput since the last collection tick, aggregated across the
+    device's physical network interfaces only (see
+    NetworkMetricsCollector._physical_interfaces in metrics/network_metrics.py
+    for why virtual ones -- docker0, veth*, tailscale0 -- are excluded rather
+    than summed alongside them). Not an active speed test against an external
+    server, which would be a slower, bandwidth-consuming measurement unlike
+    every other collector in this app.
+
+    Units are megabits/sec (bits, matching how ISPs/routers report "speed"),
+    which is deliberately different from disk_io's megabytes/sec convention
+    -- don't confuse the two when reading/comparing values.
+
+    Both fields are 0.0 on the very first collection tick (needs a previous
+    sample to compute a rate), same convention as StorageMetrics['disk_io'].
+    """
+    download_mbps: float
+    upload_mbps: float
+
+
+# ---------------------------------------------------------------------------
 # ML
 # ---------------------------------------------------------------------------
 
@@ -283,11 +309,9 @@ class MetricsSnapshot(TypedDict, total=False):
 
     On a collection failure, app.py's websocket loop sends a smaller
     fallback dict instead: {timestamp, error: True, error_message, gpu: [],
-    cpu: {}, memory: {}, storage: {}, ml: {}, bottlenecks: [], anomalies: []}
-    -- notably it OMITS the 'fans' key entirely (see websocket_endpoint in
-    app.py), unlike the normal path which always includes it. dashboard.js's
-    `if (metrics.fans)` guard tolerates this, but it's a real inconsistency
-    between the two code paths, not something this schema smooths over.
+    cpu: {}, memory: {}, storage: {}, ml: {}, fans: {}, network: {},
+    bottlenecks: [], anomalies: []} -- both paths agree on which keys are
+    present, just with empty placeholder values on the error path.
     """
     timestamp: float
     gpu: List[GPUMetrics]
@@ -296,6 +320,7 @@ class MetricsSnapshot(TypedDict, total=False):
     storage: StorageMetrics
     ml: MLMetrics
     fans: FanMetrics
+    network: NetworkMetrics
     bottlenecks: List[Dict]
     anomalies: List[Dict]
     error: bool  # only present on a metrics-collection failure

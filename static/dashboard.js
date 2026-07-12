@@ -279,6 +279,11 @@ function updateDashboard(metrics) {
         updateStoragePanel(metrics.storage);
     }
 
+    // Update network throughput
+    if (metrics.network) {
+        updateNetworkPanel(metrics.network);
+    }
+
     // Update ML metrics
     if (metrics.ml) {
         updateMLPanel(metrics.ml);
@@ -766,6 +771,14 @@ function updateStoragePanel(storage) {
 
     // HuggingFace cache
     setTextContent('storage-hf-cache', `${storage.huggingface_cache_gb.toFixed(2)} GB`);
+}
+
+function updateNetworkPanel(network) {
+    // Megabits/sec is already a sensible unit across the whole realistic
+    // range (sub-1 to 1000+ Mbps), so unlike storage's KB/s-vs-MB/s switch,
+    // one fixed unit is fine here.
+    setTextContent('network-download', `${(network.download_mbps || 0).toFixed(2)} Mbps`);
+    setTextContent('network-upload', `${(network.upload_mbps || 0).toFixed(2)} Mbps`);
 }
 
 function updateMLPanel(ml_data) {
