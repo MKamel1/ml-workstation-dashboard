@@ -6,3 +6,4 @@ psutil==5.9.6
 py-cpuinfo==9.0.0
 pySMART==1.2.4
 numpy==1.26.2
+openrgb-python==0.3.6

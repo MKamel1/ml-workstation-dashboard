@@ -29,7 +29,6 @@
                 <button type="button" class="theme-btn" id="theme-btn-light" onclick="setTheme('light')" title="Light Theme">☀️ Light</button>
                 <button type="button" class="theme-btn" id="theme-btn-auto" onclick="setTheme('auto')" title="Auto (System Theme)">🌓 Auto</button>
             </div>
-            <!-- FIX NEW-ENH-04: Export button -->
             <button onclick="exportMetrics()" class="export-button" title="Export current metrics as JSON">
                 📊 Export
             </button>
@@ -133,6 +132,34 @@
 
                     <div id="system-fans-container">
                         <!-- System fans will be added dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RGB Lighting -->
+        <div class="dashboard-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">💡 Lighting</h2>
+                </div>
+
+                <div class="metrics-row" style="align-items: center;">
+                    <div class="metric">
+                        <div class="metric-label">Power</div>
+                        <button type="button" id="lighting-power-btn" class="export-button" onclick="toggleLighting()">-</button>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Color</div>
+                        <input type="color" id="lighting-color" value="#00ff88"
+                               onchange="setLightingColor(this.value)"
+                               style="width: 60px; height: 36px; padding: 0; border: none; border-radius: 6px; background: none; cursor: pointer;">
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Status</div>
+                        <div class="metric-value" id="lighting-status" style="font-size: 0.9rem;">Loading...</div>
                     </div>
                 </div>
             </div>

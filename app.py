@@ -23,6 +23,9 @@ from detection.anomaly_detector import get_anomaly_detector
 # Import database
 from database import get_database
 
+# Import lighting control
+from lighting_control import get_lighting_controller
+
 
 app = FastAPI(title="Workstation Health Dashboard")
 
@@ -194,6 +197,27 @@ async def get_config():
         "update_interval": config.UPDATE_INTERVAL,
         "thresholds": config.THRESHOLDS,
     }
+
+
+@app.get("/api/lighting")
+async def get_lighting():
+    """Get the current RGB lighting state (power + color)."""
+    return get_lighting_controller().get_state()
+
+
+@app.post("/api/lighting")
+async def set_lighting(payload: dict):
+    """Set RGB lighting power/color. Body: {"power": "on"|"off", "color"?: "#rrggbb"}."""
+    power = payload.get("power")
+    if power == "off":
+        return get_lighting_controller().turn_off()
+    elif power == "on":
+        try:
+            return get_lighting_controller().set_color(payload.get("color", "#ffffff"))
+        except ValueError as e:
+            return JSONResponse(content={"error": str(e)}, status_code=400)
+    else:
+        return JSONResponse(content={"error": "payload.power must be 'on' or 'off'"}, status_code=400)
 
 
 @app.get("/api/history")

@@ -1052,6 +1052,7 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
 
     setTimeout(initCopyToClipboard, 1000); // Wait for metrics to populate
+    loadLightingState();
 });
 
 function setTextContent(elementId, text) {
@@ -1181,6 +1182,81 @@ async function exportMetrics() {
         console.error('Export failed:', error);
         showToast('Export failed: ' + error.message, 'error');
     }
+}
+
+// RGB lighting control (motherboard + GPU, via OpenRGB) -- a control
+// surface, not a metric, so it's fetched once on load / on user action
+// rather than riding the every-second /ws stream.
+let lightingAvailable = false;
+
+function applyLightingState(state) {
+    lightingAvailable = state.available;
+    const btn = document.getElementById('lighting-power-btn');
+    const colorInput = document.getElementById('lighting-color');
+    const statusEl = document.getElementById('lighting-status');
+
+    if (!state.available) {
+        setTextContent('lighting-status', 'OpenRGB not available');
+        if (btn) { btn.textContent = 'Unavailable'; btn.disabled = true; }
+        if (colorInput) colorInput.disabled = true;
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = state.power === 'on' ? '\ud83d\udca1 Turn Off' : '\ud83d\udd0c Turn On';
+    }
+    if (colorInput) {
+        colorInput.disabled = false;
+        if (state.power === 'on') colorInput.value = state.color;
+    }
+    setTextContent('lighting-status', state.power === 'on' ? `On (${state.color})` : 'Off');
+}
+
+async function loadLightingState() {
+    try {
+        const response = await fetch('/api/lighting');
+        applyLightingState(await response.json());
+    } catch (error) {
+        console.error('Failed to load lighting state:', error);
+        applyLightingState({ available: false, power: 'off', color: '#000000' });
+    }
+}
+
+async function postLighting(body) {
+    try {
+        const response = await fetch('/api/lighting', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showToast(data.error || 'Lighting update failed', 'error');
+            return;
+        }
+        applyLightingState(data);
+    } catch (error) {
+        console.error('Lighting update failed:', error);
+        showToast('Lighting update failed: ' + error.message, 'error');
+    }
+}
+
+function toggleLighting() {
+    if (!lightingAvailable) return;
+    const btn = document.getElementById('lighting-power-btn');
+    const turningOn = btn && btn.textContent.includes('Turn On');
+    if (turningOn) {
+        const colorInput = document.getElementById('lighting-color');
+        postLighting({ power: 'on', color: colorInput ? colorInput.value : '#ffffff' });
+    } else {
+        postLighting({ power: 'off' });
+    }
+}
+
+function setLightingColor(hex) {
+    if (!lightingAvailable) return;
+    postLighting({ power: 'on', color: hex });
 }
 
 // Theme System Management
