@@ -151,10 +151,27 @@
                     </div>
 
                     <div class="metric">
+                        <div class="metric-label">Pattern</div>
+                        <select id="lighting-mode" onchange="setLightingMode(this.value)"
+                                style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.4rem;">
+                            <option value="direct">Direct</option>
+                        </select>
+                    </div>
+
+                    <div class="metric">
                         <div class="metric-label">Color</div>
                         <input type="color" id="lighting-color" value="#00ff88"
                                onchange="setLightingColor(this.value)"
                                style="width: 60px; height: 36px; padding: 0; border: none; border-radius: 6px; background: none; cursor: pointer;">
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Brightness</div>
+                        <input type="range" id="lighting-brightness" min="0" max="100" value="100"
+                               oninput="setTextContent('lighting-brightness-value', this.value + '%')"
+                               onchange="setLightingBrightness(this.value)"
+                               style="width: 100px; vertical-align: middle;">
+                        <span id="lighting-brightness-value" style="margin-left: 0.5rem;">100%</span>
                     </div>
 
                     <div class="metric">

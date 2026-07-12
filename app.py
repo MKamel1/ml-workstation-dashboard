@@ -221,16 +221,25 @@ async def get_config():
 
 @app.get("/api/lighting")
 async def get_lighting():
-    """Get the current RGB lighting state (power + color)."""
+    """Get the current RGB lighting state (power + mode + color + brightness)."""
     try:
         return get_lighting_controller().get_state()
     except Exception as e:
         return JSONResponse(content={"error": f"Lighting state read failed: {e}"}, status_code=500)
 
 
+@app.get("/api/lighting/modes")
+async def get_lighting_modes():
+    """List of RGB pattern names the hardware actually supports."""
+    try:
+        return {"modes": get_lighting_controller().get_available_modes()}
+    except Exception as e:
+        return JSONResponse(content={"error": f"Reading lighting modes failed: {e}"}, status_code=500)
+
+
 @app.post("/api/lighting")
 async def set_lighting(payload: dict):
-    """Set RGB lighting power/color. Body: {"power": "on"|"off", "color"?: "#rrggbb"}."""
+    """Set RGB lighting. Body: {"power": "on"|"off", "mode"?: str, "color"?: "#rrggbb", "brightness"?: 0-100}."""
     power = payload.get("power")
     if power == "off":
         try:
@@ -239,11 +248,15 @@ async def set_lighting(payload: dict):
             return JSONResponse(content={"error": f"Turning off lighting failed: {e}"}, status_code=500)
     elif power == "on":
         try:
-            return get_lighting_controller().set_color(payload.get("color", "#ffffff"))
+            return get_lighting_controller().set_state(
+                mode=payload.get("mode", "direct"),
+                color_hex=payload.get("color", "#ffffff"),
+                brightness=payload.get("brightness", 100),
+            )
         except ValueError as e:
             return JSONResponse(content={"error": str(e)}, status_code=400)
         except Exception as e:
-            return JSONResponse(content={"error": f"Setting lighting color failed: {e}"}, status_code=500)
+            return JSONResponse(content={"error": f"Setting lighting failed: {e}"}, status_code=500)
     else:
         return JSONResponse(content={"error": "payload.power must be 'on' or 'off'"}, status_code=400)
 

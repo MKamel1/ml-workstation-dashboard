@@ -1192,13 +1192,16 @@ let lightingAvailable = false;
 function applyLightingState(state) {
     lightingAvailable = state.available;
     const btn = document.getElementById('lighting-power-btn');
+    const modeSelect = document.getElementById('lighting-mode');
     const colorInput = document.getElementById('lighting-color');
-    const statusEl = document.getElementById('lighting-status');
+    const brightnessInput = document.getElementById('lighting-brightness');
 
     if (!state.available) {
         setTextContent('lighting-status', 'OpenRGB not available');
         if (btn) { btn.textContent = 'Unavailable'; btn.disabled = true; }
+        if (modeSelect) modeSelect.disabled = true;
         if (colorInput) colorInput.disabled = true;
+        if (brightnessInput) brightnessInput.disabled = true;
         return;
     }
 
@@ -1206,26 +1209,56 @@ function applyLightingState(state) {
         btn.disabled = false;
         btn.textContent = state.power === 'on' ? '\ud83d\udca1 Turn Off' : '\ud83d\udd0c Turn On';
     }
+    if (modeSelect) {
+        modeSelect.disabled = false;
+        if (state.mode) modeSelect.value = state.mode;
+    }
     if (colorInput) {
         colorInput.disabled = false;
-        if (state.power === 'on') colorInput.value = state.color;
+        if (state.color) colorInput.value = state.color;
     }
-    setTextContent('lighting-status', state.power === 'on' ? `On (${state.color})` : 'Off');
+    if (brightnessInput) {
+        brightnessInput.disabled = false;
+        if (state.brightness !== undefined) {
+            brightnessInput.value = state.brightness;
+            setTextContent('lighting-brightness-value', `${state.brightness}%`);
+        }
+    }
+    const modeLabel = state.mode ? state.mode.charAt(0).toUpperCase() + state.mode.slice(1) : '';
+    setTextContent('lighting-status', state.power === 'on'
+        ? `On \u2014 ${modeLabel}, ${state.brightness}%`
+        : 'Off');
+}
+
+async function loadLightingModes() {
+    try {
+        const response = await fetch('/api/lighting/modes');
+        const data = await response.json();
+        const select = document.getElementById('lighting-mode');
+        if (select && response.ok && Array.isArray(data.modes) && data.modes.length > 0) {
+            select.innerHTML = data.modes
+                .map(m => `<option value="${m.toLowerCase()}">${m}</option>`)
+                .join('');
+        }
+    } catch (error) {
+        console.error('Failed to load lighting modes:', error);
+    }
 }
 
 async function loadLightingState() {
+    await loadLightingModes();
     try {
         const response = await fetch('/api/lighting');
         const data = await response.json();
         if (!response.ok) {
             console.error('Failed to load lighting state:', data.error);
-            applyLightingState({ available: false, power: 'off', color: '#000000' });
+            applyLightingState({ available: false, power: 'off', mode: 'direct', color: '#000000', brightness: 100 });
             return;
         }
         applyLightingState(data);
     } catch (error) {
         console.error('Failed to load lighting state:', error);
-        applyLightingState({ available: false, power: 'off', color: '#000000' });
+        applyLightingState({ available: false, power: 'off', mode: 'direct', color: '#000000', brightness: 100 });
     }
 }
 
@@ -1248,21 +1281,45 @@ async function postLighting(body) {
     }
 }
 
+// Reads the current mode/color/brightness controls so any single change
+// (toggling power, picking a color, sliding brightness) reapplies all of
+// them together -- keeps the three controls consistent with each other
+// instead of one silently overwriting what the others were doing.
+function currentLightingControls() {
+    const modeSelect = document.getElementById('lighting-mode');
+    const colorInput = document.getElementById('lighting-color');
+    const brightnessInput = document.getElementById('lighting-brightness');
+    return {
+        mode: modeSelect ? modeSelect.value : 'direct',
+        color: colorInput ? colorInput.value : '#ffffff',
+        brightness: brightnessInput ? parseInt(brightnessInput.value, 10) : 100,
+    };
+}
+
 function toggleLighting() {
     if (!lightingAvailable) return;
     const btn = document.getElementById('lighting-power-btn');
     const turningOn = btn && btn.textContent.includes('Turn On');
     if (turningOn) {
-        const colorInput = document.getElementById('lighting-color');
-        postLighting({ power: 'on', color: colorInput ? colorInput.value : '#ffffff' });
+        postLighting({ power: 'on', ...currentLightingControls() });
     } else {
         postLighting({ power: 'off' });
     }
 }
 
+function setLightingMode(mode) {
+    if (!lightingAvailable) return;
+    postLighting({ power: 'on', ...currentLightingControls(), mode });
+}
+
 function setLightingColor(hex) {
     if (!lightingAvailable) return;
-    postLighting({ power: 'on', color: hex });
+    postLighting({ power: 'on', ...currentLightingControls(), color: hex });
+}
+
+function setLightingBrightness(value) {
+    if (!lightingAvailable) return;
+    postLighting({ power: 'on', ...currentLightingControls(), brightness: parseInt(value, 10) });
 }
 
 // Theme System Management
