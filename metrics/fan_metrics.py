@@ -5,6 +5,7 @@ import glob
 from typing import Dict, List, Optional
 
 from metrics.schema import FanMetrics
+from util import lazy_singleton
 
 
 class SystemFanCollector:
@@ -207,12 +208,8 @@ class SystemFanCollector:
         return percentage
 
 
-# Singleton instance
-_system_fan_collector = None
+_get_system_fan_collector = lazy_singleton(SystemFanCollector)
 
 def get_system_fan_metrics() -> FanMetrics:
     """Get system fan metrics. See metrics/schema.py:FanMetrics for the shape."""
-    global _system_fan_collector
-    if _system_fan_collector is None:
-        _system_fan_collector = SystemFanCollector()
-    return _system_fan_collector.collect()
+    return _get_system_fan_collector().collect()

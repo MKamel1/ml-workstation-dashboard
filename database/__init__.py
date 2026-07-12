@@ -8,6 +8,15 @@ from typing import Dict, List, Optional
 from queue import Queue, Empty
 import threading
 
+if __name__ == "__main__":
+    # Direct execution (`python database/__init__.py`) puts this file's own
+    # directory on sys.path instead of the repo root; add the root back so
+    # `import util` resolves the same as it does when imported as a package.
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from util import lazy_singleton
+
 # Sentinel put on the write queue to tell the writer thread to drain and exit.
 _WRITER_SHUTDOWN = object()
 
@@ -300,15 +309,11 @@ class MetricsDatabase:
             self.conn.close()
 
 
-# Singleton instance
-_db = None
+_get_db = lazy_singleton(MetricsDatabase)
 
 def get_database() -> MetricsDatabase:
-    """Get or create database instance."""
-    global _db
-    if _db is None:
-        _db = MetricsDatabase()
-    return _db
+    """Get or create the database instance."""
+    return _get_db()
 
 
 if __name__ == "__main__":

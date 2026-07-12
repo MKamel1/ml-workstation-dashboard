@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from metrics.schema import MLMetrics
+from util import lazy_singleton
 
 
 class MLMetricsCollector:
@@ -291,12 +292,8 @@ class MLMetricsCollector:
         return envs
 
 
-# Singleton instance
-_ml_collector = None
+_get_ml_collector = lazy_singleton(MLMetricsCollector)
 
 def get_ml_metrics() -> MLMetrics:
     """Get current ML metrics. See metrics/schema.py:MLMetrics for the shape."""
-    global _ml_collector
-    if _ml_collector is None:
-        _ml_collector = MLMetricsCollector()
-    return _ml_collector.collect()
+    return _get_ml_collector().collect()

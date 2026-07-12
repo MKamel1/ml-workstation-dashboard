@@ -6,6 +6,7 @@ from typing import Dict, List
 from pathlib import Path
 
 from metrics.schema import StorageMetrics
+from util import lazy_singleton
 
 # How long to reuse a computed HuggingFace cache size before re-walking the
 # directory tree. The cache is large and rarely changes tick-to-tick, so a
@@ -100,12 +101,8 @@ class StorageMetricsCollector:
         }
 
 
-# Singleton instance
-_storage_collector = None
+_get_storage_collector = lazy_singleton(StorageMetricsCollector)
 
 def get_storage_metrics() -> StorageMetrics:
     """Get current storage metrics. See metrics/schema.py:StorageMetrics for the shape."""
-    global _storage_collector
-    if _storage_collector is None:
-        _storage_collector = StorageMetricsCollector()
-    return _storage_collector.collect()
+    return _get_storage_collector().collect()

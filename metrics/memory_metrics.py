@@ -6,6 +6,7 @@ import re
 from typing import Dict, Optional
 
 from metrics.schema import MemoryMetrics
+from util import lazy_singleton
 
 
 class MemoryMetricsCollector:
@@ -98,12 +99,8 @@ class MemoryMetricsCollector:
         }
 
 
-# Singleton instance
-_memory_collector = None
+_get_memory_collector = lazy_singleton(MemoryMetricsCollector)
 
 def get_memory_metrics() -> MemoryMetrics:
     """Get current memory metrics. See metrics/schema.py:MemoryMetrics for the shape."""
-    global _memory_collector
-    if _memory_collector is None:
-        _memory_collector = MemoryMetricsCollector()
-    return _memory_collector.collect()
+    return _get_memory_collector().collect()

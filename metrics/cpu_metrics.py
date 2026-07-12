@@ -6,6 +6,7 @@ import os
 from typing import Dict, List
 
 from metrics.schema import CPUMetrics
+from util import lazy_singleton
 
 
 class CPUMetricsCollector:
@@ -116,12 +117,8 @@ class CPUMetricsCollector:
         }
 
 
-# Singleton instance
-_cpu_collector = None
+_get_cpu_collector = lazy_singleton(CPUMetricsCollector)
 
 def get_cpu_metrics() -> CPUMetrics:
     """Get current CPU metrics. See metrics/schema.py:CPUMetrics for the shape."""
-    global _cpu_collector
-    if _cpu_collector is None:
-        _cpu_collector = CPUMetricsCollector()
-    return _cpu_collector.collect()
+    return _get_cpu_collector().collect()

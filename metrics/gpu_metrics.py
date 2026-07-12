@@ -8,6 +8,7 @@ import psutil
 
 from metrics._util import safe_read
 from metrics.schema import GPUMetrics
+from util import lazy_singleton
 
 logger = logging.getLogger(__name__)
 
@@ -456,8 +457,7 @@ class GPUMetricsCollector:
         pass  # Intentionally empty - see docstring
 
 
-# Singleton instance
-_gpu_collector = None
+_get_gpu_collector = lazy_singleton(GPUMetricsCollector)
 
 def get_gpu_metrics() -> List[GPUMetrics]:
     """Get current GPU metrics for all GPUs.
@@ -465,7 +465,4 @@ def get_gpu_metrics() -> List[GPUMetrics]:
     See metrics/schema.py:GPUMetrics for the authoritative shape of each
     entry (a per-GPU error dict is possible too -- see that docstring).
     """
-    global _gpu_collector
-    if _gpu_collector is None:
-        _gpu_collector = GPUMetricsCollector()
-    return _gpu_collector.collect()
+    return _get_gpu_collector().collect()

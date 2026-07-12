@@ -94,6 +94,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     "memory": {},
                     "storage": {},
                     "ml": {},
+                    "fans": {},
                     "bottlenecks": [],
                     "anomalies": []
                 }

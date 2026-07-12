@@ -3,6 +3,7 @@
 from typing import Dict, List, Optional
 import config
 from metrics.schema import CPUMetrics, GPUMetrics, MemoryMetrics, MetricsSnapshot, StorageMetrics
+from util import lazy_singleton
 
 
 class BottleneckDetector:
@@ -257,12 +258,8 @@ class BottleneckDetector:
         return bottlenecks
 
 
-# Singleton instance
-_bottleneck_detector = None
+_get_bottleneck_detector = lazy_singleton(BottleneckDetector)
 
 def detect_bottlenecks(metrics: MetricsSnapshot) -> List[Dict]:
     """Detect system bottlenecks."""
-    global _bottleneck_detector
-    if _bottleneck_detector is None:
-        _bottleneck_detector = BottleneckDetector()
-    return _bottleneck_detector.detect(metrics)
+    return _get_bottleneck_detector().detect(metrics)
