@@ -85,6 +85,29 @@ if controller.is_available():
             f"GPU zone {zone.name!r} did not receive the color: {zone.colors}"
         )
 
+    # The GPU's Direct mode has a real hardware brightness field (protocol
+    # v4 ModeFlags.HAS_BRIGHTNESS) separate from RGB color -- verify setting
+    # brightness actually changes that field (not just scaling the color,
+    # which wouldn't visibly dim this GPU's LEDs the way it dims the
+    # motherboard's, since the motherboard has no equivalent native field).
+    controller.set_state(mode="direct", color_hex="#ffffff", brightness=100)
+    controller.client.update()
+    gpu = next(d for d in controller.client.devices if d.type.name == "GPU")
+    direct_mode = next(m for m in gpu.modes if m.name.lower() == "direct")
+    assert direct_mode.brightness == 100, f"expected hardware brightness 100, got {direct_mode.brightness}"
+    assert gpu.zones[0].colors[0] == RGBColor(255, 255, 255), (
+        "GPU color should stay full-strength -- brightness is the hardware field, not scaled RGB"
+    )
+
+    controller.set_state(mode="direct", color_hex="#ffffff", brightness=20)
+    controller.client.update()
+    gpu = next(d for d in controller.client.devices if d.type.name == "GPU")
+    direct_mode = next(m for m in gpu.modes if m.name.lower() == "direct")
+    assert direct_mode.brightness == 20, f"expected hardware brightness 20, got {direct_mode.brightness}"
+    assert gpu.zones[0].colors[0] == RGBColor(255, 255, 255), (
+        "GPU color should stay full-strength at every brightness level"
+    )
+
     off_state = controller.turn_off()
     # Also assert `available` here, not just `power` -- a silently-swallowed
     # failure used to fall back to {"available": False, "power": "off", ...},

@@ -15,7 +15,7 @@ import time
 from typing import List, TypedDict
 
 from openrgb import OpenRGBClient
-from openrgb.utils import ModeColors, RGBColor
+from openrgb.utils import ModeColors, ModeFlags, RGBColor
 
 from util import lazy_singleton
 
@@ -149,13 +149,37 @@ class LightingController:
         if self.is_available():
             for dev in self.client.devices:
                 modes_by_name = {m.name.lower(): m for m in dev.modes}
-                target_name = mode if mode in modes_by_name else _FALLBACK_MODE
+                target_mode = modes_by_name.get(mode, modes_by_name[_FALLBACK_MODE])
+                target_name = target_mode.name.lower()
                 current_name = dev.modes[dev.active_mode].name.lower()
-                if current_name != target_name:
-                    dev.set_mode(target_name)
-                    time.sleep(_MODE_SWITCH_SETTLE_SECONDS)
-                target_color_mode = modes_by_name[target_name].color_mode
-                if target_color_mode == ModeColors.PER_LED:
+                switching_mode = current_name != target_name
+
+                # This GPU's Direct mode has a real hardware brightness
+                # parameter (protocol v4 ModeFlags.HAS_BRIGHTNESS, a 0-100
+                # range on the mode itself) -- separate from, and likely
+                # what actually drives, the physical dimming, rather than
+                # scaled RGB values. Confirmed the motherboard's modes don't
+                # have a usable one (only its unrelated "Music" mode claims
+                # the flag, with a degenerate 0-0 range), so this only
+                # applies to devices that genuinely have it, not everything.
+                has_native_brightness = (
+                    bool(target_mode.flags & ModeFlags.HAS_BRIGHTNESS)
+                    and target_mode.brightness_max > target_mode.brightness_min
+                )
+                if has_native_brightness:
+                    clamped = max(target_mode.brightness_min, min(target_mode.brightness_max, brightness))
+                    target_mode.brightness = clamped
+                    dev.set_mode(target_mode)  # always resend: brightness can change with the mode name unchanged
+                    if switching_mode:
+                        time.sleep(_MODE_SWITCH_SETTLE_SECONDS)
+                    color_to_send = rgb  # full-strength color; brightness is the hardware field above, not RGB scaling
+                else:
+                    if switching_mode:
+                        dev.set_mode(target_name)
+                        time.sleep(_MODE_SWITCH_SETTLE_SECONDS)
+                    color_to_send = scaled
+
+                if target_mode.color_mode == ModeColors.PER_LED:
                     # Explicit per-zone writes rather than one device-wide
                     # set_color() call, so every physical zone unambiguously
                     # gets its own command -- on the GPU specifically, zone 0
@@ -164,13 +188,13 @@ class LightingController:
                     # one combined device-level write made it easy to wonder
                     # whether the logo's zone was really included.
                     for zone in dev.zones:
-                        zone.set_color(scaled)
-                elif target_color_mode == ModeColors.MODE_SPECIFIC:
+                        zone.set_color(color_to_send)
+                elif target_mode.color_mode == ModeColors.MODE_SPECIFIC:
                     # No zone-level equivalent for this color type (it's set
                     # via the mode's own parameters, not a per-LED write) --
                     # not exercised by any mode this hardware actually has,
                     # kept for devices/modes where it would apply.
-                    dev.set_color(scaled)
+                    dev.set_color(color_to_send)
                 # else NONE: auto-color effects (Rainbow, Wave, Spectrum
                 # Cycle, ...) manage their own colors in firmware -- nothing
                 # to set/scale, and brightness has no effect on those modes.
