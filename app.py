@@ -239,7 +239,7 @@ async def get_lighting_modes():
 
 @app.post("/api/lighting")
 async def set_lighting(payload: dict):
-    """Set RGB lighting. Body: {"power": "on"|"off", "mode"?: str, "color"?: "#rrggbb", "brightness"?: 0-100}."""
+    """Set RGB lighting. Body: {"power": "on"|"off", "mode"?: str, "color"?: "#rrggbb", "brightness"?: 0-100, "speed"?: 0-100}."""
     power = payload.get("power")
     if power == "off":
         try:
@@ -252,6 +252,7 @@ async def set_lighting(payload: dict):
                 mode=payload.get("mode", "direct"),
                 color_hex=payload.get("color", "#ffffff"),
                 brightness=payload.get("brightness", 100),
+                speed=payload.get("speed", 50),
             )
         except ValueError as e:
             return JSONResponse(content={"error": str(e)}, status_code=400)

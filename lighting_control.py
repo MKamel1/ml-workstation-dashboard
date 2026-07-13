@@ -42,6 +42,7 @@ class LightingState(TypedDict):
     mode: str  # lowercase mode name, e.g. "direct", "static", "wave", "rainbow"
     color: str  # "#rrggbb" -- the base (unscaled) color, before brightness is applied
     brightness: int  # 0-100
+    speed: int  # 0-100, 0=slowest/100=fastest -- only affects modes with a native speed control
 
 
 def _parse_hex_color(value: str) -> RGBColor:
@@ -52,15 +53,23 @@ def _parse_hex_color(value: str) -> RGBColor:
     return RGBColor(int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
 
 
-def _parse_brightness(value) -> int:
+def _parse_percent(value, label: str) -> int:
     """Raise ValueError if `value` isn't an integer 0-100."""
     try:
         value = int(value)
     except (TypeError, ValueError):
-        raise ValueError(f"Invalid brightness {value!r}, expected an integer 0-100")
+        raise ValueError(f"Invalid {label} {value!r}, expected an integer 0-100")
     if not (0 <= value <= 100):
-        raise ValueError(f"Invalid brightness {value!r}, expected an integer 0-100")
+        raise ValueError(f"Invalid {label} {value!r}, expected an integer 0-100")
     return value
+
+
+def _parse_brightness(value) -> int:
+    return _parse_percent(value, "brightness")
+
+
+def _parse_speed(value) -> int:
+    return _parse_percent(value, "speed")
 
 
 def _scale_color(color: RGBColor, brightness_pct: int) -> RGBColor:
@@ -72,6 +81,19 @@ def _scale_color(color: RGBColor, brightness_pct: int) -> RGBColor:
     return RGBColor(round(color.red * factor), round(color.green * factor), round(color.blue * factor))
 
 
+def _interpolate(pct: int, out_min: int, out_max: int) -> int:
+    """Map a 0-100 user-facing percentage onto a device's own [out_min,
+    out_max] range for a mode parameter (brightness/speed).
+
+    `out_min`/`out_max` are used exactly as OpenRGB reports them, in
+    whichever order -- this motherboard's speed range is reported backwards
+    (speed_min=255, speed_max=0: a *lower* raw value is faster), and plain
+    linear interpolation between the two endpoints handles that correctly
+    without needing to special-case the direction.
+    """
+    return round(out_min + (out_max - out_min) * (pct / 100))
+
+
 class LightingController:
     """Controls every OpenRGB-managed device (motherboard + GPU RGB) as one
     unit -- one power toggle, one pattern/mode, one color, and one brightness,
@@ -81,11 +103,12 @@ class LightingController:
     so "Wave" still lights the GPU up (statically) instead of leaving it
     untouched or rejecting the whole request.
 
-    `power`, `mode`, `color`, and `brightness` are tracked here rather than
-    always re-derived from hardware, unlike get_state() used to do for pure
-    on/off: brightness has no hardware-readable equivalent to begin with
-    (it's a scaling factor applied before sending a color, not a value any
-    of these devices report back), and once different devices can land in
+    `power`, `mode`, `color`, `brightness`, and `speed` are tracked here
+    rather than always re-derived from hardware, unlike get_state() used to
+    do for pure on/off: brightness/speed have no single hardware-readable
+    equivalent to begin with (they're either a scaling factor applied before
+    sending a color, or a mode-specific field whose meaning/range differs
+    per device), and once different devices can land in
     different actual modes (the Direct-mode fallback above), there's no
     longer one unambiguous "current mode" to read back for the whole rig
     either. `power` is still real: turn_off()/set_state() apply it to
@@ -104,26 +127,38 @@ class LightingController:
         self._mode = "direct"
         self._color = "#ffffff"
         self._brightness = 100
+        self._speed = 50
 
     def is_available(self) -> bool:
         return self.client is not None
 
-    def get_available_modes(self) -> List[str]:
-        """Mode names the primary (motherboard) device supports, excluding
-        'Off' -- that's the power toggle, not a pattern choice."""
+    def get_available_modes(self) -> List[dict]:
+        """Name + capability info for each mode the primary (motherboard)
+        device supports, excluding 'Off' -- that's the power toggle, not a
+        pattern choice. `has_speed` lets the frontend disable/hide the
+        speed control for modes that don't have anything to animate (e.g.
+        Static), instead of hardcoding that list on the client side.
+        """
         if not self.is_available():
             return []
-        return [m.name for m in self.client.devices[0].modes if m.name.lower() != 'off']
+        return [
+            {"name": m.name, "has_speed": bool(m.flags & ModeFlags.HAS_SPEED) and m.speed_min != m.speed_max}
+            for m in self.client.devices[0].modes
+            if m.name.lower() != 'off'
+        ]
 
     def get_state(self) -> LightingState:
         """`power` reflects the primary device's actual current hardware
-        mode; `mode`/`color`/`brightness` reflect what this controller last
-        applied (see the class docstring for why those aren't re-derived
-        from hardware). Propagates any hardware/SDK error rather than
-        swallowing it into a fake result -- a real failure here must be
-        visibly distinguishable from a real, successful "off" read.
+        mode; `mode`/`color`/`brightness`/`speed` reflect what this
+        controller last applied (see the class docstring for why those
+        aren't re-derived from hardware). Propagates any hardware/SDK error
+        rather than swallowing it into a fake result -- a real failure here
+        must be visibly distinguishable from a real, successful "off" read.
         """
-        tracked = {"mode": self._mode, "color": self._color, "brightness": self._brightness}
+        tracked = {
+            "mode": self._mode, "color": self._color,
+            "brightness": self._brightness, "speed": self._speed,
+        }
         if not self.is_available():
             return {"available": False, "power": "off", **tracked}
         self.client.update()
@@ -132,19 +167,21 @@ class LightingController:
         self._power = "on" if is_on else "off"
         return {"available": True, "power": self._power, **tracked}
 
-    def set_state(self, mode: str, color_hex: str, brightness) -> LightingState:
+    def set_state(self, mode: str, color_hex: str, brightness, speed) -> LightingState:
         """Turn every device on, applying `mode` (falling back to Direct on
         any device that doesn't support it) with `color_hex` scaled by
-        `brightness` (0-100).
+        `brightness` (0-100), and `speed` (0-100, 0=slowest/100=fastest) on
+        any mode that has a native speed control.
 
         Propagates any hardware/SDK error -- see get_state()'s docstring.
         """
         rgb = _parse_hex_color(color_hex)  # validate before touching hardware
         brightness = _parse_brightness(brightness)
+        speed = _parse_speed(speed)
         mode = mode.lower() if isinstance(mode, str) else _FALLBACK_MODE
         scaled = _scale_color(rgb, brightness)
 
-        self._mode, self._color, self._brightness = mode, color_hex, brightness
+        self._mode, self._color, self._brightness, self._speed = mode, color_hex, brightness, speed
 
         if self.is_available():
             for dev in self.client.devices:
@@ -166,18 +203,33 @@ class LightingController:
                     bool(target_mode.flags & ModeFlags.HAS_BRIGHTNESS)
                     and target_mode.brightness_max > target_mode.brightness_min
                 )
+                # Several of the motherboard's animated modes (Breathing,
+                # Wave, Rainbow, ...) have a native speed parameter too.
+                # Note its range can be reported backwards (this hardware:
+                # speed_min=255, speed_max=0 -- lower is faster); see
+                # _interpolate()'s docstring for why that's handled generically.
+                has_native_speed = (
+                    bool(target_mode.flags & ModeFlags.HAS_SPEED)
+                    and target_mode.speed_min != target_mode.speed_max
+                )
                 if has_native_brightness:
-                    clamped = max(target_mode.brightness_min, min(target_mode.brightness_max, brightness))
-                    target_mode.brightness = clamped
-                    dev.set_mode(target_mode)  # always resend: brightness can change with the mode name unchanged
+                    target_mode.brightness = _interpolate(
+                        brightness, target_mode.brightness_min, target_mode.brightness_max)
+                if has_native_speed:
+                    target_mode.speed = _interpolate(speed, target_mode.speed_min, target_mode.speed_max)
+
+                # Resend the mode config whenever actually switching to it,
+                # or whenever it carries a numeric parameter that might have
+                # changed even though the mode name didn't (dragging the
+                # brightness/speed slider while staying on the same pattern).
+                if switching_mode or has_native_brightness or has_native_speed:
+                    dev.set_mode(target_mode)
                     if switching_mode:
                         time.sleep(_MODE_SWITCH_SETTLE_SECONDS)
-                    color_to_send = rgb  # full-strength color; brightness is the hardware field above, not RGB scaling
-                else:
-                    if switching_mode:
-                        dev.set_mode(target_name)
-                        time.sleep(_MODE_SWITCH_SETTLE_SECONDS)
-                    color_to_send = scaled
+
+                # Full-strength color when brightness is the hardware field
+                # above rather than scaled RGB (scaling on top would double-dim).
+                color_to_send = rgb if has_native_brightness else scaled
 
                 if target_mode.color_mode == ModeColors.PER_LED:
                     # Explicit per-zone writes rather than one device-wide

@@ -175,6 +175,15 @@
                     </div>
 
                     <div class="metric">
+                        <div class="metric-label">Speed</div>
+                        <input type="range" id="lighting-speed" min="0" max="100" value="50"
+                               oninput="setTextContent('lighting-speed-value', this.value + '%')"
+                               onchange="setLightingSpeed(this.value)"
+                               style="width: 100px; vertical-align: middle;">
+                        <span id="lighting-speed-value" style="margin-left: 0.5rem;">50%</span>
+                    </div>
+
+                    <div class="metric">
                         <div class="metric-label">Status</div>
                         <div class="metric-value" id="lighting-status" style="font-size: 0.9rem;">Loading...</div>
                     </div>

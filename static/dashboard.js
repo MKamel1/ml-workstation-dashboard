@@ -1204,6 +1204,10 @@ async function exportMetrics() {
 // surface, not a metric, so it's fetched once on load / on user action
 // rather than riding the every-second /ws stream.
 let lightingAvailable = false;
+// name (lowercase) -> has_speed, from /api/lighting/modes -- lets the speed
+// slider disable itself for modes with nothing to animate (e.g. Static),
+// instead of hardcoding that list of mode names on the client side.
+let lightingModeSpeedSupport = {};
 
 function applyLightingState(state) {
     lightingAvailable = state.available;
@@ -1211,6 +1215,7 @@ function applyLightingState(state) {
     const modeSelect = document.getElementById('lighting-mode');
     const colorInput = document.getElementById('lighting-color');
     const brightnessInput = document.getElementById('lighting-brightness');
+    const speedInput = document.getElementById('lighting-speed');
 
     if (!state.available) {
         setTextContent('lighting-status', 'OpenRGB not available');
@@ -1218,6 +1223,7 @@ function applyLightingState(state) {
         if (modeSelect) modeSelect.disabled = true;
         if (colorInput) colorInput.disabled = true;
         if (brightnessInput) brightnessInput.disabled = true;
+        if (speedInput) speedInput.disabled = true;
         return;
     }
 
@@ -1240,6 +1246,13 @@ function applyLightingState(state) {
             setTextContent('lighting-brightness-value', `${state.brightness}%`);
         }
     }
+    if (speedInput) {
+        speedInput.disabled = !lightingModeSpeedSupport[state.mode];
+        if (state.speed !== undefined) {
+            speedInput.value = state.speed;
+            setTextContent('lighting-speed-value', `${state.speed}%`);
+        }
+    }
     const modeLabel = state.mode ? state.mode.charAt(0).toUpperCase() + state.mode.slice(1) : '';
     setTextContent('lighting-status', state.power === 'on'
         ? `On \u2014 ${modeLabel}, ${state.brightness}%`
@@ -1252,8 +1265,10 @@ async function loadLightingModes() {
         const data = await response.json();
         const select = document.getElementById('lighting-mode');
         if (select && response.ok && Array.isArray(data.modes) && data.modes.length > 0) {
+            lightingModeSpeedSupport = {};
+            data.modes.forEach(m => { lightingModeSpeedSupport[m.name.toLowerCase()] = m.has_speed; });
             select.innerHTML = data.modes
-                .map(m => `<option value="${m.toLowerCase()}">${m}</option>`)
+                .map(m => `<option value="${m.name.toLowerCase()}">${m.name}</option>`)
                 .join('');
         }
     } catch (error) {
@@ -1268,13 +1283,13 @@ async function loadLightingState() {
         const data = await response.json();
         if (!response.ok) {
             console.error('Failed to load lighting state:', data.error);
-            applyLightingState({ available: false, power: 'off', mode: 'direct', color: '#000000', brightness: 100 });
+            applyLightingState({ available: false, power: 'off', mode: 'direct', color: '#000000', brightness: 100, speed: 50 });
             return;
         }
         applyLightingState(data);
     } catch (error) {
         console.error('Failed to load lighting state:', error);
-        applyLightingState({ available: false, power: 'off', mode: 'direct', color: '#000000', brightness: 100 });
+        applyLightingState({ available: false, power: 'off', mode: 'direct', color: '#000000', brightness: 100, speed: 50 });
     }
 }
 
@@ -1297,18 +1312,20 @@ async function postLighting(body) {
     }
 }
 
-// Reads the current mode/color/brightness controls so any single change
-// (toggling power, picking a color, sliding brightness) reapplies all of
-// them together -- keeps the three controls consistent with each other
-// instead of one silently overwriting what the others were doing.
+// Reads the current mode/color/brightness/speed controls so any single
+// change (toggling power, picking a color, sliding brightness or speed)
+// reapplies all of them together -- keeps the controls consistent with
+// each other instead of one silently overwriting what the others were doing.
 function currentLightingControls() {
     const modeSelect = document.getElementById('lighting-mode');
     const colorInput = document.getElementById('lighting-color');
     const brightnessInput = document.getElementById('lighting-brightness');
+    const speedInput = document.getElementById('lighting-speed');
     return {
         mode: modeSelect ? modeSelect.value : 'direct',
         color: colorInput ? colorInput.value : '#ffffff',
         brightness: brightnessInput ? parseInt(brightnessInput.value, 10) : 100,
+        speed: speedInput ? parseInt(speedInput.value, 10) : 50,
     };
 }
 
@@ -1336,6 +1353,11 @@ function setLightingColor(hex) {
 function setLightingBrightness(value) {
     if (!lightingAvailable) return;
     postLighting({ power: 'on', ...currentLightingControls(), brightness: parseInt(value, 10) });
+}
+
+function setLightingSpeed(value) {
+    if (!lightingAvailable) return;
+    postLighting({ power: 'on', ...currentLightingControls(), speed: parseInt(value, 10) });
 }
 
 // Theme System Management
