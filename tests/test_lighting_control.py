@@ -70,6 +70,21 @@ if controller.is_available():
     assert fallback_state["power"] == "on"
     assert fallback_state["brightness"] == 50
 
+    # Every physical zone on every device must get the color -- explicitly
+    # verifies the GPU's zone 0 ("0 - RGBW", the "GEFORCE RTX" logo) isn't
+    # silently skipped in favor of only zone 1 (the light bar). This is the
+    # kind of per-zone coverage gap that would look identical to success
+    # from get_state() alone, since that only reads the primary (motherboard)
+    # device -- so this checks the GPU zones directly.
+    controller.set_state(mode="direct", color_hex="#aa33cc", brightness=100)
+    controller.client.update()
+    gpu = next(d for d in controller.client.devices if d.type.name == "GPU")
+    assert len(gpu.zones) >= 2, f"expected the GPU to expose at least 2 zones, got {len(gpu.zones)}"
+    for zone in gpu.zones:
+        assert zone.colors and zone.colors[0] == RGBColor(0xaa, 0x33, 0xcc), (
+            f"GPU zone {zone.name!r} did not receive the color: {zone.colors}"
+        )
+
     off_state = controller.turn_off()
     # Also assert `available` here, not just `power` -- a silently-swallowed
     # failure used to fall back to {"available": False, "power": "off", ...},

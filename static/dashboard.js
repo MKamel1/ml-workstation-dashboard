@@ -776,9 +776,25 @@ function updateStoragePanel(storage) {
 function updateNetworkPanel(network) {
     // Megabits/sec is already a sensible unit across the whole realistic
     // range (sub-1 to 1000+ Mbps), so unlike storage's KB/s-vs-MB/s switch,
-    // one fixed unit is fine here.
-    setTextContent('network-download', `${(network.download_mbps || 0).toFixed(2)} Mbps`);
-    setTextContent('network-upload', `${(network.upload_mbps || 0).toFixed(2)} Mbps`);
+    // one fixed unit is enough for the primary reading. The byte-based
+    // figure underneath is a pure unit conversion of the same value (not a
+    // separately-measured quantity) -- useful since file transfers/downloads
+    // are usually reported in MB/s or KB/s, not Mbps.
+    const downloadMbps = network.download_mbps || 0;
+    const uploadMbps = network.upload_mbps || 0;
+    setTextContent('network-download', `${downloadMbps.toFixed(2)} Mbps`);
+    setTextContent('network-upload', `${uploadMbps.toFixed(2)} Mbps`);
+    setTextContent('network-download-bytes', formatMbpsAsBytesPerSec(downloadMbps));
+    setTextContent('network-upload-bytes', formatMbpsAsBytesPerSec(uploadMbps));
+}
+
+function formatMbpsAsBytesPerSec(mbps) {
+    const bytesPerSec = (mbps * 1_000_000) / 8;
+    const mbPerSec = bytesPerSec / (1024 * 1024);
+    if (mbPerSec < 0.1 && mbPerSec > 0) {
+        return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+    }
+    return `${mbPerSec.toFixed(2)} MB/s`;
 }
 
 function updateMLPanel(ml_data) {

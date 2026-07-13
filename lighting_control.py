@@ -154,12 +154,26 @@ class LightingController:
                 if current_name != target_name:
                     dev.set_mode(target_name)
                     time.sleep(_MODE_SWITCH_SETTLE_SECONDS)
-                # Auto-color effects (Rainbow, Wave, Spectrum Cycle, ...)
-                # have color_mode NONE -- they manage their own colors in
-                # firmware, so there's nothing to set/scale for them, and
-                # brightness has no effect on those modes.
-                if modes_by_name[target_name].color_mode != ModeColors.NONE:
+                target_color_mode = modes_by_name[target_name].color_mode
+                if target_color_mode == ModeColors.PER_LED:
+                    # Explicit per-zone writes rather than one device-wide
+                    # set_color() call, so every physical zone unambiguously
+                    # gets its own command -- on the GPU specifically, zone 0
+                    # ("0 - RGBW") is the "GEFORCE RTX" side logo and zone 1
+                    # ("1 - SINGLE COLOR") is the accent light bar; relying on
+                    # one combined device-level write made it easy to wonder
+                    # whether the logo's zone was really included.
+                    for zone in dev.zones:
+                        zone.set_color(scaled)
+                elif target_color_mode == ModeColors.MODE_SPECIFIC:
+                    # No zone-level equivalent for this color type (it's set
+                    # via the mode's own parameters, not a per-LED write) --
+                    # not exercised by any mode this hardware actually has,
+                    # kept for devices/modes where it would apply.
                     dev.set_color(scaled)
+                # else NONE: auto-color effects (Rainbow, Wave, Spectrum
+                # Cycle, ...) manage their own colors in firmware -- nothing
+                # to set/scale, and brightness has no effect on those modes.
         return self.get_state()
 
     def turn_off(self) -> LightingState:
