@@ -311,6 +311,71 @@ def export_current_metrics():
     )
 
 
+# Every component key a persisted history row can have -- see
+# database/__init__.py's query_metrics() for where each one comes from.
+_EXPORTABLE_COMPONENTS = {"gpu", "cpu", "memory", "storage", "ml", "fans", "network", "bottlenecks", "anomalies"}
+
+
+def select_export_components(components_param):
+    """Parse a comma-separated components query param into a validated set.
+
+    Returns None if the param was omitted entirely, meaning "export
+    everything" -- distinct from being given but matching nothing real
+    (e.g. a typo), which returns an empty set so the caller can reject that
+    as a 400 rather than silently exporting no components at all.
+    """
+    if not components_param:
+        return None
+    requested = {c.strip().lower() for c in components_param.split(",") if c.strip()}
+    return requested & _EXPORTABLE_COMPONENTS
+
+
+@app.get("/api/export/history")
+async def export_history(start: int = None, end: int = None, components: str = None, limit: int = 200000):
+    """Download historical metrics for a time range as a JSON file, limited
+    to the requested components. Body/query: start/end (unix seconds,
+    default last 1h/now like /api/history), components (comma-separated
+    subset of gpu,cpu,memory,storage,ml,fans,network,bottlenecks,anomalies;
+    omit for all).
+    """
+    from datetime import datetime
+
+    selected = select_export_components(components)
+    if selected is None:
+        selected = set(_EXPORTABLE_COMPONENTS)
+    elif not selected:
+        return JSONResponse(
+            content={"error": f"No valid components in {components!r}; choose from {sorted(_EXPORTABLE_COMPONENTS)}"},
+            status_code=400,
+        )
+
+    try:
+        rows = db.query_metrics(start_time=start, end_time=end, limit=limit)
+    except Exception as e:
+        return JSONResponse(content={"error": f"History query failed: {e}"}, status_code=500)
+
+    filtered_rows = [
+        {"timestamp": row["timestamp"], **{key: row[key] for key in selected}}
+        for row in rows
+    ]
+
+    export_data = {
+        "export_time": datetime.now().isoformat(),
+        "start": start,
+        "end": end,
+        "components": sorted(selected),
+        "count": len(filtered_rows),
+        "data": filtered_rows,
+    }
+
+    return JSONResponse(
+        content=export_data,
+        headers={
+            "Content-Disposition": f"attachment; filename=dashboard_history_export_{int(time.time())}.json"
+        }
+    )
+
+
 # Mount static files
 try:
     import os

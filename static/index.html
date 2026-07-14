@@ -191,6 +191,48 @@
             </div>
         </div>
 
+        <!-- Export History -->
+        <div class="dashboard-grid wide">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">📤 Export History</h2>
+                </div>
+
+                <div class="metrics-row" style="align-items: flex-end; flex-wrap: wrap;">
+                    <div class="metric">
+                        <div class="metric-label">From</div>
+                        <input type="datetime-local" id="export-history-start"
+                               style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.4rem;">
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">To</div>
+                        <input type="datetime-local" id="export-history-end"
+                               style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.4rem;">
+                    </div>
+
+                    <div class="metric">
+                        <button onclick="exportHistoryRange()" class="export-button">📥 Export Range</button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.25rem;">
+                    <div class="metric-label">Components</div>
+                    <div id="export-history-components" style="display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-top: 0.5rem;">
+                        <label><input type="checkbox" value="gpu" checked> GPU</label>
+                        <label><input type="checkbox" value="cpu" checked> CPU</label>
+                        <label><input type="checkbox" value="memory" checked> Memory</label>
+                        <label><input type="checkbox" value="storage" checked> Storage</label>
+                        <label><input type="checkbox" value="network" checked> Network</label>
+                        <label><input type="checkbox" value="fans" checked> Fans</label>
+                        <label><input type="checkbox" value="ml" checked> ML</label>
+                        <label><input type="checkbox" value="bottlenecks" checked> Bottlenecks</label>
+                        <label><input type="checkbox" value="anomalies" checked> Anomalies</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Memory & Storage -->
         <div class="dashboard-grid">
             <div class="panel">

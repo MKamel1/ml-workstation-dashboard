@@ -1069,6 +1069,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setTimeout(initCopyToClipboard, 1000); // Wait for metrics to populate
     loadLightingState();
+    initExportHistoryDefaults();
 });
 
 function setTextContent(elementId, text) {
@@ -1197,6 +1198,69 @@ async function exportMetrics() {
     } catch (error) {
         console.error('Export failed:', error);
         showToast('Export failed: ' + error.message, 'error');
+    }
+}
+
+// Ranged history export -- a time window + a component checklist, unlike
+// exportMetrics() above which is always just the single latest sample.
+function initExportHistoryDefaults() {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const startInput = document.getElementById('export-history-start');
+    const endInput = document.getElementById('export-history-end');
+    if (startInput) startInput.value = toDatetimeLocalValue(oneHourAgo);
+    if (endInput) endInput.value = toDatetimeLocalValue(now);
+}
+
+function toDatetimeLocalValue(date) {
+    // <input type="datetime-local"> wants "YYYY-MM-DDTHH:MM" in local time
+    // (no timezone conversion/suffix).
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+async function exportHistoryRange() {
+    const startInput = document.getElementById('export-history-start');
+    const endInput = document.getElementById('export-history-end');
+    const components = Array.from(document.querySelectorAll('#export-history-components input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+
+    if (components.length === 0) {
+        showToast('Select at least one component to export', 'error');
+        return;
+    }
+
+    const params = new URLSearchParams();
+    if (startInput && startInput.value) {
+        params.set('start', Math.floor(new Date(startInput.value).getTime() / 1000));
+    }
+    if (endInput && endInput.value) {
+        params.set('end', Math.floor(new Date(endInput.value).getTime() / 1000));
+    }
+    params.set('components', components.join(','));
+
+    try {
+        const response = await fetch(`/api/export/history?${params.toString()}`);
+        const data = await response.json();
+        if (!response.ok) {
+            showToast(data.error || 'History export failed', 'error');
+            return;
+        }
+
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `dashboard_history_${Math.floor(Date.now() / 1000)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast(`\u2713 Exported ${data.count} record${data.count === 1 ? '' : 's'}`);
+    } catch (error) {
+        console.error('History export failed:', error);
+        showToast('History export failed: ' + error.message, 'error');
     }
 }
 
