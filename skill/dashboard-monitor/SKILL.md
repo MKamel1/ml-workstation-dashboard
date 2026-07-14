@@ -23,6 +23,30 @@ Base URL: `http://127.0.0.1:8000` if the agent runs on the workstation
 itself, otherwise the workstation's Tailscale address (ask the user, or
 check `tailscale ip -4` on the workstation).
 
+### Those tools come from an MCP server, not this skill
+
+This skill only documents how to use the dashboard — it doesn't provide
+the tools itself and can't connect anything. The tools come from a
+separate MCP server, `workstation-dashboard`, registered with Claude Code
+at user scope (`~/.claude.json`, so available in every project, not just
+this repo). Its code: `~/ai-projects/workstation-dashboard/mcp_server/`.
+
+If the tools aren't showing up, check `claude mcp list` for
+`workstation-dashboard`. If it's missing (removed, or a different
+machine/account), register it — confirm with the user first, since this
+edits their global Claude Code config:
+
+```bash
+claude mcp add workstation-dashboard -s user -- \
+  /home/omar/ai-projects/workstation-dashboard/mcp_server/venv/bin/python \
+  /home/omar/ai-projects/workstation-dashboard/mcp_server/server.py
+```
+
+A server registered this way only takes effect in a **new** Claude Code
+session — not the one that ran the command. Use the REST API fallback for
+the rest of the current session regardless of whether registration was
+just run.
+
 ## Checking machine status / health
 
 Call `get_current_metrics` (or `curl $BASE/api/metrics`). Read
