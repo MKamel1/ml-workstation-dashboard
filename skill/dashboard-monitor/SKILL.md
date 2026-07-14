@@ -62,20 +62,40 @@ VRAM/GPU util per process) — check this before concluding the GPU is
 
 ## Investigating a past issue / exporting history
 
+A single history row (every component) is ~6KB — at 1 sample/sec that's
+~20MB/hour, so there are two different tools for two different sizes of
+question. Don't use one where the other fits:
+
 1. `get_db_stats` first to see what range of history actually exists
    (`oldest_timestamp`/`newest_timestamp`) before assuming a window is
    available.
-2. For a quick look: `get_history(start, end, limit)` — recent-history
-   query, default limit 1000.
-3. For a full export (e.g. "what happened during last night's training
-   run"): `export_history(start, end, components, limit)` — same data,
-   filterable to just the components that matter (e.g.
-   `components="gpu,cpu,bottlenecks"` to skip memory/storage/network/ml/
-   fans/anomalies noise) and a much higher default row limit meant for a
-   full range rather than a quick check.
-4. Timestamps are unix seconds. Convert human time ranges ("last night",
+2. **A quick look** (a handful of recent samples, read directly): `get_history(start, end, limit)`.
+   Returns the actual rows as the tool result. Capped at 50 rows
+   server-side regardless of what's requested — if more is genuinely
+   needed, that's a sign to use export_history instead, not to ask for a
+   higher limit.
+3. **A real export** (e.g. "what happened during last night's training
+   run", anything more than a quick check): `export_history(output_path,
+   start, end, components, limit)`. Writes the data to a JSON file at
+   `output_path` (an absolute path you choose — e.g. your own scratch
+   directory; this tool has no notion of "the current directory") and
+   returns only a small summary (row count, file size, path) as the tool
+   result, NOT the data. Read or grep the written file for specific
+   values rather than expecting the call itself to hand back the data —
+   a real range can be tens of megabytes, far too large for a tool
+   result/an agent's context.
+4. Narrow `components` to just what's relevant (e.g.
+   `"gpu,cpu,bottlenecks"`) — the main lever for keeping an export small,
+   independent of the time range.
+5. Timestamps are unix seconds. Convert human time ranges ("last night",
    "the last 2 hours") to unix seconds before calling — don't pass
    natural-language strings.
+6. The dashboard itself has to build the full result in memory before
+   export_history can write it to a file — a 24-hour all-components
+   export is ~250MB server-side (measured), not just a client-side
+   concern. For a multi-day request, narrow `components` first, or pull
+   it in day-sized chunks, rather than requesting the whole range with
+   everything at once.
 
 Valid components: `gpu, cpu, memory, storage, ml, fans, network,
 bottlenecks, anomalies`. An unrecognized component name is silently

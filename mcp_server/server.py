@@ -13,6 +13,7 @@ Configuration (environment variables):
   DASHBOARD_TIMEOUT Request timeout in seconds. Default: 10
 """
 
+import json
 import os
 from typing import Optional
 
@@ -21,6 +22,15 @@ from mcp.server.fastmcp import FastMCP
 
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://127.0.0.1:8000").rstrip("/")
 DASHBOARD_TIMEOUT = float(os.environ.get("DASHBOARD_TIMEOUT", "10"))
+
+# A single history row (every component, un-filtered) is ~6KB -- measured
+# against this dashboard's real data, dominated by per-partition storage
+# stats and GPU process lists, not any one runaway field. At 1 sample/sec
+# that's ~20MB/hour, so get_history's response must stay small enough to
+# return inline as a tool result; anything larger belongs in
+# export_history's file-based path instead. Keep this well under a typical
+# context window even at the component-heavy end.
+_MAX_INLINE_HISTORY_ROWS = 50
 
 mcp = FastMCP("workstation-dashboard")
 
@@ -88,13 +98,21 @@ def get_db_stats() -> dict:
 
 
 @mcp.tool()
-def get_history(start: Optional[int] = None, end: Optional[int] = None, limit: int = 1000) -> dict:
-    """Query persisted historical metrics for a time range.
+def get_history(start: Optional[int] = None, end: Optional[int] = None, limit: int = 20) -> dict:
+    """Query recent persisted historical metrics for a time range -- a
+    quick look at a handful of samples, not a bulk export. Returns full
+    row data (every component) directly as the tool result, so `limit` is
+    capped at 50 regardless of what's requested: each row is ~6KB, and
+    even a few hundred would overflow most context windows. Use
+    export_history() instead for anything larger than a quick check --
+    that writes to a file rather than returning data inline.
 
     :param start: Range start, unix seconds. Defaults to 1 hour ago.
     :param end: Range end, unix seconds. Defaults to now.
-    :param limit: Max rows to return (most recent first within the range).
+    :param limit: Max rows to return (most recent first within the
+        range). Capped at 50.
     """
+    limit = min(limit, _MAX_INLINE_HISTORY_ROWS)
     params = {"limit": limit}
     if start is not None:
         params["start"] = start
@@ -105,23 +123,29 @@ def get_history(start: Optional[int] = None, end: Optional[int] = None, limit: i
 
 @mcp.tool()
 def export_history(
+    output_path: str,
     start: Optional[int] = None,
     end: Optional[int] = None,
     components: Optional[str] = None,
     limit: int = 200000,
 ) -> dict:
-    """Export historical metrics for a time range, limited to specific
-    components -- the same data get_history() returns, but filterable down
-    to only what's needed (e.g. just "gpu,cpu" for a training-run
-    postmortem) and with a much higher default row limit meant for a full
-    range export rather than a quick recent-history check.
+    """Export historical metrics for a time range to a JSON file on disk,
+    optionally limited to specific components. Returns a small summary
+    (row count, components, file size, path) -- NOT the data itself.
+    Even a single hour of all-components history is ~20MB, far too large
+    to return as a tool result; read or grep the written file for
+    specific values instead of expecting this call to hand back the data.
 
+    :param output_path: Absolute path to write the JSON export to (e.g.
+        a scratch/working directory you control). Required -- this
+        server has no notion of "the caller's current directory" to
+        default to.
     :param start: Range start, unix seconds. Defaults to 1 hour ago.
     :param end: Range end, unix seconds. Defaults to now.
     :param components: Comma-separated subset of: gpu, cpu, memory,
         storage, ml, fans, network, bottlenecks, anomalies. Omit for all
-        of them.
-    :param limit: Max rows to return.
+        of them. Narrowing this is the main way to keep the export small.
+    :param limit: Max rows to include.
     """
     params = {"limit": limit}
     if start is not None:
@@ -130,7 +154,20 @@ def export_history(
         params["end"] = end
     if components is not None:
         params["components"] = components
-    return _request("GET", "/api/export/history", params=params)
+
+    data = _request("GET", "/api/export/history", params=params)
+
+    with open(output_path, "w") as f:
+        json.dump(data, f)
+
+    return {
+        "file_path": output_path,
+        "count": data["count"],
+        "components": data["components"],
+        "start": data["start"],
+        "end": data["end"],
+        "size_bytes": os.path.getsize(output_path),
+    }
 
 
 @mcp.tool()

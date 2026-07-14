@@ -43,8 +43,18 @@ know what's actually available.
 Query params: `start`, `end` (unix seconds, default last 1h/now),
 `limit` (default 1000).
 
+**Size warning:** a full row (every component) is ~6KB. Don't capture this
+into a shell variable or read it as command output for anything more than
+a handful of rows — pipe to a file (`-o`) and read/grep that file instead,
+same reasoning as `/api/export/history` below. For an actual quick look,
+pass a small `limit` (10-50) and let the output print directly.
+
 ```bash
-curl -s "$BASE/api/history?start=1784040000&end=1784043600&limit=500"
+# Quick look, safe to read directly:
+curl -s "$BASE/api/history?limit=20"
+
+# Anything larger: write to a file, don't capture inline.
+curl -s "$BASE/api/history?start=1784040000&end=1784043600&limit=500" -o /tmp/history.json
 ```
 
 Returns `{"data": [...], "count": N}`, each row has every component
@@ -57,8 +67,13 @@ subset of `gpu,cpu,memory,storage,ml,fans,network,bottlenecks,anomalies`;
 omit for all) and a much higher default `limit` (200000) meant for a full
 range export.
 
+**Always write this to a file** (`-o`), never capture it as command
+output to read directly — even a single hour of all-components history
+is ~20MB. Read or grep the written file for specific values.
+
 ```bash
-curl -s "$BASE/api/export/history?start=1784040000&end=1784043600&components=gpu,cpu,bottlenecks"
+curl -s "$BASE/api/export/history?start=1784040000&end=1784043600&components=gpu,cpu,bottlenecks" \
+  -o /tmp/dashboard_export.json
 ```
 
 Returns `{"export_time", "start", "end", "components": [...], "count", "data": [...]}`

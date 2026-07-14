@@ -13,8 +13,8 @@ changes, update `server.py`'s calls, not the other way around.
 | `get_current_metrics` | `GET /api/metrics` | Live snapshot: GPU/CPU/memory/storage/network/fans/ML + bottleneck alerts |
 | `get_dashboard_config` | `GET /api/config` | Update interval + alert thresholds |
 | `get_db_stats` | `GET /api/db/stats` | How much history is persisted |
-| `get_history` | `GET /api/history` | Query persisted history for a time range |
-| `export_history` | `GET /api/export/history` | Same, filtered to specific components, higher row limit |
+| `get_history` | `GET /api/history` | Query persisted history for a time range (small, returned inline, capped at 50 rows) |
+| `export_history` | `GET /api/export/history` | Filtered range export, written to a file on disk (returns a summary, not the data) |
 | `get_lighting_state` | `GET /api/lighting` | Current RGB power/pattern/color/brightness/speed |
 | `get_lighting_modes` | `GET /api/lighting/modes` | Which patterns the hardware supports, and which animate (have a speed) |
 | `set_lighting` | `POST /api/lighting` | Turn RGB on/off, set pattern/color/brightness/speed |
@@ -23,6 +23,13 @@ changes, update `server.py`'s calls, not the other way around.
 a rolling window fed only by the dashboard's own live websocket stream, and
 an agent polling this tool must not perturb that baseline (same reasoning
 `/api/metrics` already uses internally; see `app.py`'s `collect_raw_metrics`).
+
+`export_history` writes to a file rather than returning data directly,
+unlike every other tool: a single history row (every component) is ~6KB,
+so even one hour of full-range history is ~20MB — far too large for a
+tool result an agent would otherwise have to hold in context. `get_history`
+stays inline but is capped at 50 rows for the same reason; anything larger
+should go through `export_history` instead.
 
 ## Setup
 
