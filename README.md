@@ -97,6 +97,16 @@ cd /home/omar/ai-projects/workstation-dashboard
 - Active ML processes
 - Framework detection (PyTorch, TensorFlow)
 
+## AI agent access
+
+- `mcp_server/` - MCP server exposing the dashboard (metrics, history export,
+  RGB lighting control) to Claude and other MCP-compatible agents as 8 tools.
+  See `mcp_server/README.md` for setup.
+- `skill/dashboard-monitor/` - Claude skill documenting how to use those
+  tools (or the REST API directly as a fallback) for common workflows:
+  checking machine health, investigating a past issue, exporting history,
+  controlling lighting.
+
 ## Documentation
 
 - `CHANGELOG.md` - Version history and changes
