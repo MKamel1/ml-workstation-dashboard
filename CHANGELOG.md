@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Fan Profiles**: Quiet/Performance toggle on the dashboard, backed by CoolerControl. Performance mode runs the case/AIO fans and the GPU's own fans on a more aggressive curve for sustained DL/LLM training load; the AIO pump always stays fixed at 100% regardless of mode. Requires `COOLERCONTROL_PASSWORD` set in the environment.
+
 ## [1.1.0] - 2025-12-21
 
 ### Added

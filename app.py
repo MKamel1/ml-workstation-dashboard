@@ -26,6 +26,9 @@ from database import get_database
 # Import lighting control
 from lighting_control import get_lighting_controller
 
+# Import fan profile control
+from fan_profile_control import get_fan_profile_controller
+
 
 app = FastAPI(title="Workstation Health Dashboard")
 
@@ -260,6 +263,27 @@ async def set_lighting(payload: dict):
             return JSONResponse(content={"error": f"Setting lighting failed: {e}"}, status_code=500)
     else:
         return JSONResponse(content={"error": "payload.power must be 'on' or 'off'"}, status_code=400)
+
+
+@app.get("/api/fans/profile")
+async def get_fan_profile():
+    """Get the current fan profile mode (quiet/performance/mixed/unknown)."""
+    try:
+        return get_fan_profile_controller().get_state()
+    except Exception as e:
+        return JSONResponse(content={"error": f"Reading fan profile failed: {e}"}, status_code=500)
+
+
+@app.post("/api/fans/profile")
+async def set_fan_profile(payload: dict):
+    """Set the fan profile. Body: {"mode": "quiet"|"performance"}."""
+    mode = payload.get("mode")
+    if mode not in ("quiet", "performance"):
+        return JSONResponse(content={"error": "mode must be 'quiet' or 'performance'"}, status_code=400)
+    try:
+        return get_fan_profile_controller().set_profile(mode)
+    except Exception as e:
+        return JSONResponse(content={"error": f"Setting fan profile failed: {e}"}, status_code=500)
 
 
 @app.get("/api/history")

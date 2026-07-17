@@ -191,6 +191,32 @@
             </div>
         </div>
 
+        <!-- Fan Profile -->
+        <div class="dashboard-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">🌀 Fan Profile</h2>
+                </div>
+
+                <div class="metrics-row" style="align-items: center;">
+                    <div class="metric">
+                        <div class="metric-label">Mode</div>
+                        <div class="fan-profile-switcher" role="group" aria-label="Fan profile selection">
+                            <button type="button" class="fan-profile-btn" id="fan-profile-btn-quiet"
+                                    onclick="setFanProfile('quiet')" title="Quiet">🤫 Quiet</button>
+                            <button type="button" class="fan-profile-btn" id="fan-profile-btn-performance"
+                                    onclick="setFanProfile('performance')" title="Performance">🚀 Performance</button>
+                        </div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">Status</div>
+                        <div class="metric-value" id="fan-profile-status" style="font-size: 0.9rem;">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Export History -->
         <div class="dashboard-grid wide">
             <div class="panel">
