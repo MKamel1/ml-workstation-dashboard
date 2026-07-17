@@ -11,8 +11,9 @@ rather than hand-rolling OpenRGB's network protocol.
 """
 
 import re
+import subprocess
 import time
-from typing import List, TypedDict
+from typing import List, Optional, TypedDict
 
 from openrgb import OpenRGBClient
 from openrgb.utils import ModeColors, ModeFlags, RGBColor
@@ -119,15 +120,43 @@ class LightingController:
     """
 
     def __init__(self):
-        try:
-            self.client = OpenRGBClient(address='127.0.0.1', port=6742, name='ml-dashboard')
-        except Exception:
-            self.client = None
+        self.client = self._connect_with_recovery()
         self._power = "off"
         self._mode = "direct"
         self._color = "#ffffff"
         self._brightness = 100
         self._speed = 50
+
+    @staticmethod
+    def _connect_with_recovery() -> Optional[OpenRGBClient]:
+        """Connect to openrgb.service, nudging it awake once if it's down.
+
+        openrgb.service needs root (raw i2c/PCI access to read the
+        motherboard's RGB controller) and has been observed not to
+        auto-start after a reboot despite being systemd-enabled -- cause
+        unconfirmed. Rather than requiring a manual `systemctl start`
+        every reboot, try starting it ourselves via a narrowly-scoped
+        NOPASSWD sudo rule (see README) before giving up. `sudo -n`
+        (non-interactive) so this fails fast instead of hanging on a
+        password prompt that will never come when running headless as a
+        systemd service -- if the sudoers rule isn't set up yet, this is
+        just a slightly slower way to end up at the same client=None
+        result the try/except already handled before this existed.
+        """
+        try:
+            return OpenRGBClient(address='127.0.0.1', port=6742, name='ml-dashboard')
+        except Exception:
+            pass
+
+        try:
+            subprocess.run(
+                ["sudo", "-n", "systemctl", "start", "openrgb.service"],
+                timeout=10, capture_output=True,
+            )
+            time.sleep(2)  # give the server a moment to start listening
+            return OpenRGBClient(address='127.0.0.1', port=6742, name='ml-dashboard')
+        except Exception:
+            return None
 
     def is_available(self) -> bool:
         return self.client is not None

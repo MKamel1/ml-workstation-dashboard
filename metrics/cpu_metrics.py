@@ -3,7 +3,9 @@
 import psutil
 import cpuinfo
 import os
-from typing import Dict, List
+import time
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from metrics.schema import CPUMetrics
 from util import lazy_singleton
@@ -11,13 +13,86 @@ from util import lazy_singleton
 
 class CPUMetricsCollector:
     """Collects detailed CPU metrics."""
-    
+
     def __init__(self):
         """Initialize CPU info."""
         self.cpu_info = cpuinfo.get_cpu_info()
         self.cpu_count = psutil.cpu_count(logical=False)
         self.logical_count = psutil.cpu_count(logical=True)
-        
+
+        self._rapl_path = self._find_rapl_package_path()
+        self._rapl_max_range_uj = self._read_int_file(self._rapl_path / 'max_energy_range_uj') if self._rapl_path else None
+        if self._rapl_max_range_uj is None:
+            self._rapl_path = None
+        # previous_time deliberately None, not time.time(): the first
+        # collect() call must skip the power computation entirely rather
+        # than divide by whatever near-zero time has elapsed since
+        # construction -- same convention as NetworkMetricsCollector's
+        # previous_time=None (metrics/network_metrics.py).
+        self._prev_energy_uj = self._read_int_file(self._rapl_path / 'energy_uj') if self._rapl_path else None
+        self._prev_energy_time = None
+
+    @staticmethod
+    def _find_rapl_package_path() -> Optional[Path]:
+        """Find the RAPL 'package-N' powercap domain (CPU socket-level total
+        energy) -- not one of its 'core'/'uncore' subdomains, which would
+        double-count energy already included in the parent package reading.
+
+        Requires root to actually read energy_uj (kernel default
+        permissions); returns the path regardless so collect() can detect
+        that case and report None rather than crashing (see README for the
+        one-time udev rule that unlocks it for a regular user).
+        """
+        base = Path('/sys/class/powercap')
+        if not base.is_dir():
+            return None
+        for domain in sorted(base.glob('intel-rapl:*')):
+            if domain.name.count(':') != 1:
+                continue  # skip subdomains like intel-rapl:0:0 (core/uncore)
+            try:
+                if (domain / 'name').read_text().strip().startswith('package'):
+                    return domain
+            except OSError:
+                continue
+        return None
+
+    @staticmethod
+    def _read_int_file(path: Path) -> Optional[int]:
+        try:
+            return int(path.read_text().strip())
+        except (OSError, ValueError):
+            return None
+
+    def _read_package_power_w(self) -> Optional[float]:
+        """Average CPU package power (Watts) since the last collect() call,
+        computed from RAPL's cumulative energy counter -- same delta-over-
+        interval approach as NetworkMetricsCollector.collect() (bytes ->
+        rate), just energy -> power. None if RAPL isn't available/readable,
+        or on the very first tick (needs a previous sample for the delta).
+        """
+        if not self._rapl_path:
+            return None
+        current_energy = self._read_int_file(self._rapl_path / 'energy_uj')
+        current_time = time.time()
+        if current_energy is None:
+            return None
+
+        power_w = None
+        if self._prev_energy_time is not None:
+            time_delta = current_time - self._prev_energy_time
+            if time_delta > 0:
+                energy_delta = current_energy - self._prev_energy_uj
+                if energy_delta < 0:
+                    # The counter wrapped around (hits max_energy_range_uj
+                    # then resets to 0) -- add the range back to get the
+                    # real elapsed energy instead of a bogus negative power.
+                    energy_delta += self._rapl_max_range_uj
+                power_w = round((energy_delta / 1_000_000) / time_delta, 1)
+
+        self._prev_energy_uj = current_energy
+        self._prev_energy_time = current_time
+        return power_w
+
     def collect(self) -> Dict:
         """Collect comprehensive CPU metrics."""
         
@@ -31,7 +106,10 @@ class CPUMetricsCollector:
         
         # Load average
         load_avg = os.getloadavg()
-        
+
+        # Package power (RAPL, needs root -- see _read_package_power_w)
+        package_power_w = self._read_package_power_w()
+
         # Temperature (Linux-specific)
         temps = {}
         try:
@@ -95,6 +173,9 @@ class CPUMetricsCollector:
             "frequency_max_mhz": round(cpu_freq.max, 0) if cpu_freq else None,
             "utilization_total": round(cpu_percent, 1),
             
+            # Power
+            "package_power_w": package_power_w,
+
             # Load average
             "load_1min": round(load_avg[0], 2),
             "load_5min": round(load_avg[1], 2),

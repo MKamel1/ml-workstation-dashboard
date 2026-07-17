@@ -114,6 +114,39 @@
             </div>
         </div>
 
+        <!-- System Power -->
+        <div class="dashboard-grid wide">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">⚡ System Power</h2>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric">
+                        <div class="metric-label">GPU</div>
+                        <div class="metric-value" id="power-gpu" style="font-size: 1.1rem;">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label">CPU Package</div>
+                        <div class="metric-value" id="power-cpu" style="font-size: 1.1rem;">-</div>
+                    </div>
+
+                    <div class="metric">
+                        <div class="metric-label" title="GPU + CPU package power only -- not a true whole-machine reading (motherboard, drives, RAM, fans aren't individually metered)">Estimated Total (GPU+CPU)</div>
+                        <div class="metric-value" id="power-total" style="font-size: 1.1rem;">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">Estimated Total Power History (60s)</div>
+                    <div class="chart-container">
+                        <canvas id="power-total-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Fans Section -->
         <div class="dashboard-grid wide">
             <div class="panel">
@@ -307,6 +340,13 @@
                         <div class="metric-value" id="memory-active-inactive" style="font-size: 0.85rem;">-</div>
                     </div>
                 </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">Memory Usage History (60s)</div>
+                    <div class="chart-container">
+                        <canvas id="memory-usage-chart"></canvas>
+                    </div>
+                </div>
             </div>
 
             <div class="panel">
@@ -363,6 +403,13 @@
                         <div class="metric-label">Upload</div>
                         <div class="metric-value" id="network-upload" style="font-size: 1.1rem;">-</div>
                         <div id="network-upload-bytes" style="font-size: 0.8rem; color: var(--text-secondary);">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="metric-label">Network Throughput History (60s)</div>
+                    <div class="chart-container">
+                        <canvas id="network-throughput-chart"></canvas>
                     </div>
                 </div>
             </div>

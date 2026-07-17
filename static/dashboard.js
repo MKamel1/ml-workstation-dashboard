@@ -14,10 +14,13 @@ let charts = {};
 // Keyed per GPU index so multi-GPU systems get independent chart history instead of sharing one series
 let gpuHistories = {};  // { 0: {gpu_util: [], gpu_temp: [], timestamps: []}, 1: {...}, ... }
 
-// Global history for CPU and memory
+// Global history for CPU, memory, network, and power
 let metricsHistory = {
     cpu_util: [],
     memory_pct: [],
+    network_download: [],
+    network_upload: [],
+    total_power: [],
     timestamps: []
 };
 
@@ -72,11 +75,145 @@ function initCPUChart() {
     }
 }
 
+function initMemoryChart() {
+    const memCtx = document.getElementById('memory-usage-chart');
+    if (memCtx && !charts.memoryUsage) {
+        charts.memoryUsage = new Chart(memCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Memory Usage',
+                    data: [],
+                    borderColor: '#00d4ff',
+                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: { color: getChartThemeColors().tickColor },
+                        grid: { color: getChartThemeColors().gridColor }
+                    },
+                    x: {
+                        ticks: { color: getChartThemeColors().tickColor, maxTicksLimit: 4 },
+                        grid: {
+                            color: getChartThemeColors().gridColor,
+                            display: true
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function initNetworkChart() {
+    const netCtx = document.getElementById('network-throughput-chart');
+    if (netCtx && !charts.networkThroughput) {
+        charts.networkThroughput = new Chart(netCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Download (Mbps)',
+                        data: [],
+                        borderColor: '#00ff88',
+                        backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'Upload (Mbps)',
+                        data: [],
+                        borderColor: '#ffa500',
+                        backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, labels: { color: getChartThemeColors().tickColor } }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: getChartThemeColors().tickColor },
+                        grid: { color: getChartThemeColors().gridColor }
+                    },
+                    x: {
+                        ticks: { color: getChartThemeColors().tickColor, maxTicksLimit: 4 },
+                        grid: {
+                            color: getChartThemeColors().gridColor,
+                            display: true
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function initPowerChart() {
+    const powerCtx = document.getElementById('power-total-chart');
+    if (powerCtx && !charts.totalPower) {
+        charts.totalPower = new Chart(powerCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Estimated Total Power (W)',
+                    data: [],
+                    borderColor: '#ff6b6b',
+                    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: getChartThemeColors().tickColor },
+                        grid: { color: getChartThemeColors().gridColor }
+                    },
+                    x: {
+                        ticks: { color: getChartThemeColors().tickColor, maxTicksLimit: 4 },
+                        grid: {
+                            color: getChartThemeColors().gridColor,
+                            display: true
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
 function updateCharts(metrics) {
     const now = new Date();
     const timeStr = now.toLocaleTimeString();
 
-    // Update global history (CPU, memory)
+    // Update global history (CPU, memory, network, power)
     metricsHistory.timestamps.push(timeStr);
     if (metrics.cpu) {
         metricsHistory.cpu_util.push(metrics.cpu.utilization_total || 0);
@@ -84,12 +221,20 @@ function updateCharts(metrics) {
     if (metrics.memory) {
         metricsHistory.memory_pct.push(metrics.memory.percent || 0);
     }
+    if (metrics.network) {
+        metricsHistory.network_download.push(metrics.network.download_mbps || 0);
+        metricsHistory.network_upload.push(metrics.network.upload_mbps || 0);
+    }
+    metricsHistory.total_power.push(totalPowerW(metrics));
 
     // Keep only last 60 points for global history
     if (metricsHistory.timestamps.length > MAX_HISTORY_POINTS) {
         metricsHistory.timestamps.shift();
         metricsHistory.cpu_util.shift();
         metricsHistory.memory_pct.shift();
+        metricsHistory.network_download.shift();
+        metricsHistory.network_upload.shift();
+        metricsHistory.total_power.shift();
     }
 
     // Update per-GPU history
@@ -132,6 +277,39 @@ function updateCharts(metrics) {
         charts.cpuUtil.data.datasets[0].data = metricsHistory.cpu_util;
         charts.cpuUtil.update('none');
     }
+
+    // Update memory chart
+    if (charts.memoryUsage) {
+        charts.memoryUsage.data.labels = metricsHistory.timestamps;
+        charts.memoryUsage.data.datasets[0].data = metricsHistory.memory_pct;
+        charts.memoryUsage.update('none');
+    }
+
+    // Update network chart
+    if (charts.networkThroughput) {
+        charts.networkThroughput.data.labels = metricsHistory.timestamps;
+        charts.networkThroughput.data.datasets[0].data = metricsHistory.network_download;
+        charts.networkThroughput.data.datasets[1].data = metricsHistory.network_upload;
+        charts.networkThroughput.update('none');
+    }
+
+    // Update power chart
+    if (charts.totalPower) {
+        charts.totalPower.data.labels = metricsHistory.timestamps;
+        charts.totalPower.data.datasets[0].data = metricsHistory.total_power;
+        charts.totalPower.update('none');
+    }
+}
+
+// Sums GPU power_draw_w (all GPUs) + CPU package_power_w. Either/both can be
+// null (GPU: driver doesn't report it; CPU: needs the one-time RAPL udev
+// permission fix, see README) -- treated as 0 in the sum so one missing
+// component doesn't blank out the whole reading, same rationale as the
+// || 0 fallbacks used for every other metric in this function.
+function totalPowerW(metrics) {
+    const gpuWatts = (metrics.gpu || []).reduce((sum, gpu) => sum + (gpu.power_draw_w || 0), 0);
+    const cpuWatts = (metrics.cpu && metrics.cpu.package_power_w) || 0;
+    return Math.round((gpuWatts + cpuWatts) * 10) / 10;
 }
 
 function connectWebSocket() {
@@ -277,6 +455,11 @@ function updateDashboard(metrics) {
     // Update storage metrics
     if (metrics.storage) {
         updateStoragePanel(metrics.storage);
+    }
+
+    // Update system power (GPU + CPU package)
+    if (metrics.gpu || metrics.cpu) {
+        updatePowerPanel(metrics);
     }
 
     // Update network throughput
@@ -735,6 +918,19 @@ function updateMemoryPanel(memory) {
     }
 }
 
+function updatePowerPanel(metrics) {
+    const gpuWatts = (metrics.gpu || []).reduce((sum, gpu) => sum + (gpu.power_draw_w || 0), 0);
+    const hasGpuPower = (metrics.gpu || []).some(gpu => gpu.power_draw_w != null);
+    const cpuWatts = metrics.cpu && metrics.cpu.package_power_w;
+
+    setTextContent('power-gpu', hasGpuPower ? `${gpuWatts.toFixed(1)}W` : 'N/A');
+    // CPU package power needs a one-time root-only permission fix (see
+    // README) -- 'Unavailable' rather than a bare 'N/A' points at that,
+    // instead of reading as a transient/unexplained gap.
+    setTextContent('power-cpu', cpuWatts != null ? `${cpuWatts.toFixed(1)}W` : 'Unavailable');
+    setTextContent('power-total', `${totalPowerW(metrics).toFixed(1)}W`);
+}
+
 function updateStoragePanel(storage) {
     // Main partition
     const partitions = storage.partitions || [];
@@ -1065,6 +1261,9 @@ document.head.appendChild(style);
 document.addEventListener('DOMContentLoaded', () => {
     initThemeSystem();
     initCPUChart();
+    initMemoryChart();
+    initNetworkChart();
+    initPowerChart();
     connectWebSocket();
 
     setTimeout(initCopyToClipboard, 1000); // Wait for metrics to populate

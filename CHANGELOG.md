@@ -7,6 +7,9 @@ All notable changes to this project are documented in this file.
 ### Added
 
 - **Fan Profiles**: Quiet/Performance toggle on the dashboard, backed by CoolerControl. Performance mode runs the case/AIO fans and the GPU's own fans on a more aggressive curve for sustained DL/LLM training load; the AIO pump always stays fixed at 100% regardless of mode. Requires `COOLERCONTROL_PASSWORD` set in the environment.
+- **Live trend charts**: Memory usage and network throughput now have 60-second history charts (matching the existing CPU chart), not just a current number.
+- **System Power panel**: Estimated total power draw (GPU + CPU package, via NVML and Linux RAPL) with a live chart. CPU package power needs a one-time sudo step to unlock a kernel permission (see README) — without it, the total falls back to GPU-only.
+- **OpenRGB self-recovery**: the dashboard now tries to start `openrgb.service` itself if it's down when the Lighting panel connects, since it's been observed not to auto-start after a reboot. Needs a one-time narrowly-scoped sudo rule (see README) to be allowed to do so.
 
 ## [1.1.0] - 2025-12-21
 

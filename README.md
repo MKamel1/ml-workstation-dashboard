@@ -138,6 +138,26 @@ export COOLERCONTROL_PASSWORD=<your CoolerControl CCAdmin password>
 
 Without it, the panel just shows "CoolerControl not available" — everything else in the dashboard works normally.
 
+**CPU package power** (the "CPU" figure in the ⚡ System Power panel) reads Linux's RAPL energy counter, which the kernel makes root-only by default. One-time fix, run once with sudo:
+
+```bash
+echo 'SUBSYSTEM=="powercap", ACTION=="add", RUN+="/bin/chmod -R a+r /sys/class/powercap/intel-rapl"' | sudo tee /etc/udev/rules.d/99-rapl-power.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=powercap
+```
+
+Without it, CPU package power shows "Unavailable" and the System Power total falls back to GPU-only — everything else works normally.
+
+**OpenRGB** (the lighting panel's backing service) needs root to talk to the motherboard's RGB controller directly, and has been observed not to auto-start after a reboot despite being systemd-enabled. The dashboard nudges it awake itself on startup if it's down, but that needs a narrowly-scoped passwordless-sudo rule (only these two exact commands, nothing else) to be allowed to do so. One-time fix, run once with sudo:
+
+```bash
+echo 'omar ALL=(root) NOPASSWD: /usr/bin/systemctl start openrgb.service, /usr/bin/systemctl is-active openrgb.service' | sudo tee /etc/sudoers.d/openrgb-dashboard
+sudo chmod 440 /etc/sudoers.d/openrgb-dashboard
+sudo visudo -c
+```
+
+Without it, the dashboard's self-recovery attempt just silently fails (same as before this existed) and OpenRGB needs a manual `sudo systemctl start openrgb.service` after each reboot.
+
 ```bash
 # Run in development mode
 python app.py
