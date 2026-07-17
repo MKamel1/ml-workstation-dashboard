@@ -128,7 +128,17 @@ cd /home/omar/ai-projects/workstation-dashboard
 ```bash
 # Activate virtual environment
 source venv/bin/activate
+```
 
+The Fan Profile panel talks to CoolerControl and needs its login password:
+
+```bash
+export COOLERCONTROL_PASSWORD=<your CoolerControl CCAdmin password>
+```
+
+Without it, the panel just shows "CoolerControl not available" — everything else in the dashboard works normally.
+
+```bash
 # Run in development mode
 python app.py
 
