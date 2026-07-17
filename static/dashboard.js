@@ -1069,6 +1069,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setTimeout(initCopyToClipboard, 1000); // Wait for metrics to populate
     loadLightingState();
+    loadFanProfileState();
     initExportHistoryDefaults();
 });
 
@@ -1422,6 +1423,73 @@ function setLightingBrightness(value) {
 function setLightingSpeed(value) {
     if (!lightingAvailable) return;
     postLighting({ power: 'on', ...currentLightingControls(), speed: parseInt(value, 10) });
+}
+
+// Fan profile control (Quiet/Performance toggle, via CoolerControl) -- same
+// interaction shape as the lighting power toggle above: fetch state on
+// load, POST on click, re-render from whatever the server actually applied.
+let fanProfileAvailable = false;
+
+function applyFanProfileState(state) {
+    fanProfileAvailable = state.available;
+    const quietBtn = document.getElementById('fan-profile-btn-quiet');
+    const perfBtn = document.getElementById('fan-profile-btn-performance');
+
+    if (!state.available) {
+        setTextContent('fan-profile-status', 'CoolerControl not available');
+        quietBtn.disabled = true;
+        perfBtn.disabled = true;
+        quietBtn.classList.remove('active');
+        perfBtn.classList.remove('active');
+        return;
+    }
+
+    quietBtn.disabled = false;
+    perfBtn.disabled = false;
+    quietBtn.classList.toggle('active', state.mode === 'quiet');
+    perfBtn.classList.toggle('active', state.mode === 'performance');
+
+    if (state.mode === 'mixed') {
+        setTextContent('fan-profile-status', 'Mixed (channels don\'t match either profile)');
+    } else {
+        setTextContent('fan-profile-status', state.mode === 'quiet' ? 'Quiet' : 'Performance');
+    }
+}
+
+async function loadFanProfileState() {
+    try {
+        const response = await fetch('/api/fans/profile');
+        const data = await response.json();
+        if (data.error) {
+            console.error('Failed to load fan profile state:', data.error);
+            applyFanProfileState({ available: false, mode: 'unknown' });
+            return;
+        }
+        applyFanProfileState(data);
+    } catch (error) {
+        console.error('Failed to load fan profile state:', error);
+        applyFanProfileState({ available: false, mode: 'unknown' });
+    }
+}
+
+async function setFanProfile(mode) {
+    if (!fanProfileAvailable) return;
+    try {
+        const response = await fetch('/api/fans/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode }),
+        });
+        const data = await response.json();
+        if (data.error) {
+            showToast(data.error || 'Fan profile update failed', 'error');
+            return;
+        }
+        applyFanProfileState(data);
+    } catch (error) {
+        console.error('Fan profile update failed:', error);
+        showToast('Fan profile update failed: ' + error.message, 'error');
+    }
 }
 
 // Theme System Management

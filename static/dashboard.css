@@ -548,3 +548,32 @@ body {
 [data-theme="light"] .theme-btn.active {
     color: #ffffff;
 }
+
+.fan-profile-switcher {
+    display: inline-flex;
+    gap: 0.35rem;
+}
+
+.fan-profile-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.fan-profile-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-panel-hover);
+}
+
+.fan-profile-btn.active {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
+}
