@@ -139,6 +139,7 @@ class CPUMetrics(TypedDict):
     frequency_current_mhz: Optional[float]
     frequency_max_mhz: Optional[float]
     utilization_total: float
+    package_power_w: Optional[float]  # RAPL package energy delta since last tick; None if unreadable (needs root, see README) or on the first tick
     load_1min: float
     load_5min: float
     load_15min: float
